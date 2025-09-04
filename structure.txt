@@ -1,0 +1,32 @@
+┌───────────────────────────────────────────┐
+│ Dolphin (Human)                           │
+│ - Dumps Screen Frames (PNG/Video)         │
+│ - Logs Telemetry (CSV per frame)          │
+│ - Records Human Controller Inputs         │
+└──────────────────┬────────────────────────┘
+                   │
+                   ▼
+┌───────────────────────────────────────────┐
+│ Federated Client (Docker)                 │
+│ - Loads (frames + telemetry + actions)    │
+│ - Preprocesses data                       │
+│ - Trains local imitation model            │
+│ - Sends model weights → Server            │
+└──────────────────┬────────────────────────┘
+                   │
+                   ▼
+┌───────────────────────────────────────────┐
+│ Federated Server (Docker)                 │
+│ - Aggregates updates (FedAvg)             │
+│ - Builds updated global model             │
+│ - Distributes global model to clients     │
+└──────────────────┬────────────────────────┘
+                   │
+                   ▼
+┌───────────────────────────────────────────┐
+│ Dolphin (AI)                              │
+│ - Feeds (frames + telemetry) live         │
+│ - Global model outputs controller actions │
+│ - Actions injected via controller pipe    │
+│ - Audience sees AI drive                  │
+└───────────────────────────────────────────┘
