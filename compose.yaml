@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  server:
+    build: ./server
+    container_name: server
+    ports:
+      - "5000:5000"
+    volumes:
+      - model_data:/app/models
+
+  client:
+    build: ./client
+    container_name: client
+    depends_on:
+      - server
+
+volumes:
+  model_data:
