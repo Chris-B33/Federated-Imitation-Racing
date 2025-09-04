@@ -1,5 +1,8 @@
 from flask import Flask, request
+from datetime import datetime
 import os
+
+from lib.utils import random_name_generator
 
 UPLOAD_FOLDER = "models"
 
@@ -11,9 +14,14 @@ def upload():
     if "file" not in request.files:
         return "No file uploaded", 400
     file = request.files["file"]
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+
+    random_name = random_name_generator()
+    filepath = os.path.join(UPLOAD_FOLDER, random_name)
+
     file.save(filepath)
-    return f"Model saved to {filepath}", 200
+    print(f"[+] {datetime.now().strftime('%H:%M:%S')} All Models: {os.listdir(UPLOAD_FOLDER)}")
+
+    return f"Model saved as {random_name}", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

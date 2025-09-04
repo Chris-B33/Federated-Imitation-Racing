@@ -1,9 +1,7 @@
 FROM python:3.10-slim
 
 WORKDIR /app
-
-COPY train.py .
-COPY requirements.txt .
+COPY . .
 
 RUN pip install --no-cache-dir -r requirements.txt
 

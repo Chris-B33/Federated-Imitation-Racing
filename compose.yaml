@@ -7,7 +7,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - model_data:/app/models
+      - model_storage:/app/models
 
   client:
     build: ./client
@@ -16,4 +16,4 @@ services:
       - server
 
 volumes:
-  model_data:
+  model_storage:
