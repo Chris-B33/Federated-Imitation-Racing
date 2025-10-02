@@ -1,3 +1,4 @@
-dolphin/
 client/input/
+dolphin/*
 !dolphin/Scripts/
+!dolphin/Scripts/**
