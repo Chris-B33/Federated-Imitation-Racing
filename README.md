@@ -40,3 +40,6 @@ Before running the project, make sure you have the following installed on your s
     - ```bash
       docker compose up
     - This will train and send a model to the central server.
+
+## TODO
+Update README.md.
