@@ -144,7 +144,7 @@ def get_current_labels():
         "DPAD_DOWN":   int((controller_inputs & 16) != 0),
         "DPAD_LEFT":   int((controller_inputs & 32) != 0),
         "DPAD_RIGHT":  int((controller_inputs & 64) != 0),
-        "STEER":       round((controller_steer / 7) - 1, 4)
+        "STEER":       controller_steer / 7
     }
 
     return normalised_labels
@@ -178,10 +178,6 @@ async def main():
     last_in_race = False
     last_is_paused = False
     frame_count = 0
-
-    # Erase data if there
-    open(FED_INPUTS_FILE_PATH, "w").close()
-    open(FED_LABELS_FILE_PATH, "w").close()
 
     while True:
         # Draw GUI
