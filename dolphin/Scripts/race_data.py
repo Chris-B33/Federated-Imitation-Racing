@@ -4,6 +4,7 @@ BASE_ADDRS = {
     "game_base": 0x80000000,
     "player_base": 0x809C18F8,
     "controller_base": 0x809BD70C,
+    "position_base": 0x7FFF0000 + 0x9C2EF8
 }
 
 FED_INPUTS_FILE_PATH = "../client/input/inputs.csv"
@@ -57,8 +58,9 @@ def is_in_race():
 
 def is_game_paused():
     """
-    Determines if the game is paused
+    Determines if the game is paused in-game OR pressed home button
     """
+    global prev_labels
     return get_data_point(0x809C2F3C, 0x00, "u8", deref=False)
 
 def get_data_point(base_addr, offset, data_type="u8", deref=True):
@@ -82,17 +84,49 @@ def get_data_point(base_addr, offset, data_type="u8", deref=True):
         print(f"Error reading memory at {hex(addr)}: {e}")
         return None
 
+def get_player_position(pointer_addr=0x809C2EF8):
+    """
+    Resolves the player position through double pointer dereferencing,
+    following the same logic as the C# code.
+    """
+    try:
+        ptr1 = memory.read_u32(pointer_addr)
+        if not ptr1:
+            return None
+
+        ptr2 = memory.read_u32(ptr1 + 0x40)
+        if not ptr2:
+            return None
+
+        x = memory.read_f32(ptr2 + 0x0)
+        y = memory.read_f32(ptr2 + 0x4)
+        z = memory.read_f32(ptr2 + 0x8)
+
+        return {"x": x, "y": y, "z": z}
+
+    except Exception as e:
+        print(f"Error reading position: {e}")
+        return None
+
 def get_current_race_telemetry(prev_telemetry):
     """Return the current race telemetry from Mario Kart Wii (PAL)."""
+    player_pos = get_player_position()
+
+    dx = abs(prev_telemetry["pos_x"] - player_pos["x"])
+    dy = abs(prev_telemetry["pos_y"] - player_pos["y"])
+    dz = abs(prev_telemetry["pos_z"] - player_pos["z"])
+
+    speed = (dx**2 + dy**2 +dz**2) ** 0.5
+
     lap_progress = get_data_point(0x809BD730, 0xF8, "f32", deref=True)
 
     telemetry = {
-        "pos_x": 0,
-        "pos_y": 0,
-        "pos_z": 0,
-        "speed": 0,
-        "accel": 0,
-        "lap": round(lap_progress - 1, 4),
+        "pos_x": player_pos["x"],
+        "pos_y": player_pos["y"],
+        "pos_z": player_pos["z"],
+        "speed": speed,
+        "accel": speed - prev_telemetry["speed"],
+        "lap":   lap_progress - 1,
     }
 
     return telemetry
@@ -102,15 +136,14 @@ def get_current_labels():
     controller_inputs = get_data_point(BASE_ADDRS["controller_base"], 0x61, "u8", deref=True)
     controller_steer = get_data_point(BASE_ADDRS["controller_base"], 0x3C, "u8", deref=True)
 
-    normalised_labels = {  
+    normalised_labels = { 
+        "2":           int((controller_inputs & 1) != 0), 
         "1":           int((controller_inputs & 2) != 0),
-        "2":           int((controller_inputs & 1) != 0),
         "PLUS":        int((controller_inputs & 4) != 0),
         "DPAD_UP":     int((controller_inputs & 8) != 0),
         "DPAD_DOWN":   int((controller_inputs & 16) != 0),
         "DPAD_LEFT":   int((controller_inputs & 32) != 0),
         "DPAD_RIGHT":  int((controller_inputs & 64) != 0),
-        "HOME":        int((controller_inputs & 128) != 0),
         "STEER":       round((controller_steer / 7) - 1, 4)
     }
 
@@ -131,10 +164,10 @@ def draw_gui(telemetry, labels, frame_count):
 
     # Labels
     controller_inputs = [f"{ctrl}: {state}" for ctrl, state in labels.items()]
-    gui.draw_text((150, 10), 0xffff0000, "\n".join(controller_inputs))
+    gui.draw_text((10, 95), 0xffff0000, "\n".join(controller_inputs))
 
     # Frame count
-    gui.draw_text((10, 100), 0xffff0000, f"frame: {frame_count}")
+    gui.draw_text((10, 210), 0xffff0000, f"frame: {frame_count}")
 
 async def main():
     """Main function."""
@@ -199,14 +232,14 @@ async def main():
             await event.frameadvance()
             continue
 
-        # If race is over
-        if prev_telemetry["lap"] > 3:
-            await event.frameadvance()
-            continue
-
         # Get input data
         telemetry = get_current_race_telemetry(prev_telemetry)
         labels = get_current_labels()
+
+        # Stop recording after race is done
+        if telemetry["lap"] > 3.0:
+            event.frameadvance()
+            continue
 
         # Overwrite prev
         prev_telemetry = {k: v for k, v in telemetry.items()}
