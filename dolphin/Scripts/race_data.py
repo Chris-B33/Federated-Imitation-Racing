@@ -2,6 +2,7 @@ from dolphin import memory, event, gui
 
 BASE_ADDRS = {
     "game_base": 0x80000000,
+    "player_base": 0x809C18F8,
     "controller_base": 0x809BD70C,
 }
 
@@ -10,16 +11,23 @@ FED_LABELS_FILE_PATH = "../client/input/labels.csv"
 CEN_INPUTS_FILE_PATH = "../server/input/inputs.csv"
 CEN_LABELS_FILE_PATH = "../server/input/labels.csv"
 
-cur_telemetry = {
-        "pos_x": 0,
-        "pos_y": 0,
-        "pos_z": 0,
-        
-        "speed": 0,
-        "accel": 0,
-
-        "lap": 1,
-        "frame_count": 0
+prev_telemetry = {
+    "pos_x": 0,
+    "pos_y": 0,
+    "pos_z": 0,
+    "speed": 0,
+    "accel": 0,
+    "lap": 1,
+}
+prev_labels = {
+    "1": 0,
+    "2": 0,
+    "PLUS": 0,
+    "DPAD_UP": 0,
+    "DPAD_DOWN": 0,
+    "DPAD_LEFT": 0,
+    "DPAD_RIGHT": 0,
+    "STEER": 0    
 }
 
 def is_game_loaded():
@@ -41,15 +49,17 @@ def is_game_loaded():
 def is_in_race():
     """Return True if a race is active."""
     try:
-        stage = get_data_point(BASE_ADDRS["plyr_base"], 0x2B, "u8", deref=True)
+        stage = get_data_point(BASE_ADDRS["player_base"], 0x2B, "u8", deref=True)
         return stage == 1
     except Exception as e:
         print(e)
         return False
 
-def is_game_paused(labels):
-    """Return True if the race is paused."""
-    return labels["PLUS"] == 1
+def is_game_paused():
+    """
+    Determines if the game is paused
+    """
+    return get_data_point(0x809C2F3C, 0x00, "u8", deref=False)
 
 def get_data_point(base_addr, offset, data_type="u8", deref=True):
     """Reads a value from memory, optionally dereferencing a pointer first."""
@@ -72,20 +82,17 @@ def get_data_point(base_addr, offset, data_type="u8", deref=True):
         print(f"Error reading memory at {hex(addr)}: {e}")
         return None
 
-def get_current_race_telemetry(prev_telemetry, frame_count):
+def get_current_race_telemetry(prev_telemetry):
     """Return the current race telemetry from Mario Kart Wii (PAL)."""
-    speed = get_data_point(0x8057AC2C, 0x00, "u8", deref=True)
+    lap_progress = get_data_point(0x809BD730, 0xF8, "f32", deref=True)
 
     telemetry = {
         "pos_x": 0,
         "pos_y": 0,
         "pos_z": 0,
-        
-        "speed": speed,
-        "accel": prev_telemetry["speed"] - speed,
-
-        "lap": 1,
-        "frame_count": frame_count
+        "speed": 0,
+        "accel": 0,
+        "lap": round(lap_progress - 1, 4),
     }
 
     return telemetry
@@ -95,18 +102,17 @@ def get_current_labels():
     controller_inputs = get_data_point(BASE_ADDRS["controller_base"], 0x61, "u8", deref=True)
     controller_steer = get_data_point(BASE_ADDRS["controller_base"], 0x3C, "u8", deref=True)
 
-    normalised_labels = {
-        "1":           int((mem_val & 2) != 0),
-        "2":           int((mem_val & 1) != 0),
-        "PAUSE":       int((mem_val & 4) != 0),
-        "DPAD_UP":     int((mem_val & 8) != 0),
-        "DPAD_DOWN":   int((mem_val & 16) != 0),
-        "DPAD_LEFT":   int((mem_val & 32) != 0),
-        "DPAD_RIGHT":  int((mem_val & 64) != 0),
-        "steer":       (controller_steer / 7) - 1
+    normalised_labels = {  
+        "1":           int((controller_inputs & 2) != 0),
+        "2":           int((controller_inputs & 1) != 0),
+        "PLUS":        int((controller_inputs & 4) != 0),
+        "DPAD_UP":     int((controller_inputs & 8) != 0),
+        "DPAD_DOWN":   int((controller_inputs & 16) != 0),
+        "DPAD_LEFT":   int((controller_inputs & 32) != 0),
+        "DPAD_RIGHT":  int((controller_inputs & 64) != 0),
+        "HOME":        int((controller_inputs & 128) != 0),
+        "STEER":       round((controller_steer / 7) - 1, 4)
     }
-
-    gui.draw_text((10, 30), 0xffff0000, f"moving_dir: {moving_dir}")
 
     return normalised_labels
 
@@ -118,9 +124,22 @@ def write_data(data_list, filepath):
     except Exception as e:
         print(e)
 
+def draw_gui(telemetry, labels, frame_count):
+    # Telemetry
+    environment_inputs = [f"{ctrl}: {state}" for ctrl, state in telemetry.items()]
+    gui.draw_text((10, 10), 0xffff0000, "\n".join(environment_inputs))
+
+    # Labels
+    controller_inputs = [f"{ctrl}: {state}" for ctrl, state in labels.items()]
+    gui.draw_text((150, 10), 0xffff0000, "\n".join(controller_inputs))
+
+    # Frame count
+    gui.draw_text((10, 100), 0xffff0000, f"frame: {frame_count}")
+
 async def main():
     """Main function."""
-    global cur_telemetry
+    # Initialise
+    global prev_telemetry, prev_labels
     last_game_loaded = False
     last_game_id = None
     last_in_race = False
@@ -132,6 +151,10 @@ async def main():
     open(FED_LABELS_FILE_PATH, "w").close()
 
     while True:
+        # Draw GUI
+        draw_gui(prev_telemetry, prev_labels, frame_count)
+
+        # Check game is loaded
         loaded, game_id = is_game_loaded()
         if loaded != last_game_loaded or game_id != last_game_id:
             last_game_loaded = loaded
@@ -143,7 +166,11 @@ async def main():
                 print("❌ Game unloaded.")
                 await event.frameadvance()
                 continue
-
+        elif not loaded:
+            await event.frameadvance()
+            continue
+        
+        # Check in race
         in_race = is_in_race()
         if in_race != last_in_race:
             last_in_race = in_race
@@ -154,34 +181,48 @@ async def main():
                 print("🕹️ Exited race.")
                 await event.frameadvance()
                 continue
-        
-        if in_race and loaded:
-            frame_count += 1
-            gui.draw_text((10, 10), 0xffff0000, f"Frame: {frame_count}")
+        elif not in_race:
+            await event.frameadvance()
+            continue
 
-            telemetry = get_current_race_telemetry(cur_telemetry, frame_count)
-            labels = get_current_labels()
+        # Check is paused
+        is_paused = is_game_paused()
+        if is_paused != last_is_paused:
+            last_is_paused = is_paused
+            if is_paused:
+                print("⏸️ Game paused.")
+                await event.frameadvance()
+                continue
+            else:
+                print("▶️ Game unpaused.")
+        elif is_paused:
+            await event.frameadvance()
+            continue
 
-            is_paused = is_game_paused(labels)
-            if is_paused != last_is_paused:
-                last_is_paused = is_paused
+        # If race is over
+        if prev_telemetry["lap"] > 3:
+            await event.frameadvance()
+            continue
 
-                if is_paused:
-                    print("⏸️ Game paused.")
-                else:
-                    print("▶️ Game unpaused.")
-                    await event.frameadvance()
-                    continue
-            
-            cur_telemetry = telemetry
+        # Get input data
+        telemetry = get_current_race_telemetry(prev_telemetry)
+        labels = get_current_labels()
 
-            # Federated Data Writing (ONCE THEN DELETED)
-            write_data(telemetry.values(), FED_INPUTS_FILE_PATH)
-            write_data(labels.values(), FED_LABELS_FILE_PATH)
+        # Overwrite prev
+        prev_telemetry = {k: v for k, v in telemetry.items()}
+        prev_labels = {k: v for k, v in labels.items()}
 
-            # Centralised Data Writing (PERSISTS)
-            write_data(telemetry.values(), CEN_INPUTS_FILE_PATH)
-            write_data(labels.values(), CEN_LABELS_FILE_PATH)
+        # Update frame count
+        frame_count += 1
+        telemetry["frame"] = frame_count
+
+        # Federated Data Writing (ONCE THEN DELETED)
+        write_data(telemetry.values(), FED_INPUTS_FILE_PATH)
+        write_data(labels.values(), FED_LABELS_FILE_PATH)
+
+        # Centralised Data Writing (PERSISTS)
+        write_data(telemetry.values(), CEN_INPUTS_FILE_PATH)
+        write_data(labels.values(), CEN_LABELS_FILE_PATH)
 
         await event.frameadvance()
 
