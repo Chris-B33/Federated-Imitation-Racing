@@ -5,4 +5,4 @@ COPY . .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python", "train.py"]
+CMD ["python", "train_client.py"]

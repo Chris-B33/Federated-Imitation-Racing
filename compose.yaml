@@ -8,12 +8,15 @@ services:
       - "5000:5000"
     volumes:
       - model_storage:/app/models
+      - ./shared:/app/shared
 
   client:
     build: ./client
     container_name: client
     depends_on:
       - server
+    volumes:
+      - ./shared:/app/shared
 
 volumes:
   model_storage:
