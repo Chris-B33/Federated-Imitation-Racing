@@ -7,7 +7,7 @@
                    ▼
 ┌───────────────────────────────────────────┐
 │ Federated Client (Docker)                 │
-│ - Loads (frames + telemetry + actions)    │
+│ - Loads (telemetry + actions)             │
 │ - Preprocesses data                       │
 │ - Trains local imitation model            │
 │ - Sends local model weights → Server      │

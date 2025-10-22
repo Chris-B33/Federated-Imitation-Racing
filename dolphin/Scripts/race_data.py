@@ -144,7 +144,7 @@ def get_current_labels():
         "DPAD_DOWN":   int((controller_inputs & 16) != 0),
         "DPAD_LEFT":   int((controller_inputs & 32) != 0),
         "DPAD_RIGHT":  int((controller_inputs & 64) != 0),
-        "STEER":       controller_steer / 7
+        "STEER":       controller_steer
     }
 
     return normalised_labels
