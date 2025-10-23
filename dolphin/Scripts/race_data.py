@@ -1,5 +1,6 @@
 from dolphin import memory, event, gui
 
+
 BASE_ADDRS = {
     "game_base": 0x80000000,
     "player_base": 0x809C18F8,
@@ -7,10 +8,10 @@ BASE_ADDRS = {
     "position_base": 0x7FFF0000 + 0x9C2EF8
 }
 
-FED_INPUTS_FILE_PATH = "../client/input/inputs.csv"
-FED_LABELS_FILE_PATH = "../client/input/labels.csv"
-CEN_INPUTS_FILE_PATH = "../server/input/inputs.csv"
-CEN_LABELS_FILE_PATH = "../server/input/labels.csv"
+FED_INPUTS_FILE_PATH = "../client/data/inputs.csv"
+FED_LABELS_FILE_PATH = "../client/data/labels.csv"
+CEN_INPUTS_FILE_PATH = "../server/data/inputs.csv"
+CEN_LABELS_FILE_PATH = "../server/data/labels.csv"
 
 prev_telemetry = {
     "pos_x": 0,
@@ -31,8 +32,11 @@ prev_labels = {
     "STEER": 0    
 }
 
+
 def is_game_loaded():
-    """Check if a valid game is running in Dolphin and return its ID."""
+    """
+    Check if a valid game is running in Dolphin and return its ID.
+    """
     try:
         game_id_str = "".join(
             chr(memory.read_u8(BASE_ADDRS["game_base"] + offset))
@@ -47,14 +51,18 @@ def is_game_loaded():
     else:
         return False, None
 
+
 def is_in_race():
-    """Return True if a race is active."""
+    """
+    Return True if a race is active.
+    """
     try:
         stage = get_data_point(BASE_ADDRS["player_base"], 0x2B, "u8", deref=True)
         return stage == 1
     except Exception as e:
         print(e)
         return False
+
 
 def is_game_paused():
     """
@@ -63,8 +71,11 @@ def is_game_paused():
     global prev_labels
     return get_data_point(0x809C2F3C, 0x00, "u8", deref=False)
 
+
 def get_data_point(base_addr, offset, data_type="u8", deref=True):
-    """Reads a value from memory, optionally dereferencing a pointer first."""
+    """
+    Reads a value from memory, optionally dereferencing a pointer first.
+    """
     try:
         addr = memory.read_u32(base_addr) + offset if deref else base_addr + offset
 
@@ -83,6 +94,7 @@ def get_data_point(base_addr, offset, data_type="u8", deref=True):
     except Exception as e:
         print(f"Error reading memory at {hex(addr)}: {e}")
         return None
+
 
 def get_player_position(pointer_addr=0x809C2EF8):
     """
@@ -108,8 +120,11 @@ def get_player_position(pointer_addr=0x809C2EF8):
         print(f"Error reading position: {e}")
         return None
 
+
 def get_current_race_telemetry(prev_telemetry):
-    """Return the current race telemetry from Mario Kart Wii (PAL)."""
+    """
+    Return the current race telemetry from Mario Kart Wii (PAL).
+    """
     player_pos = get_player_position()
 
     dx = abs(prev_telemetry["pos_x"] - player_pos["x"])
@@ -131,8 +146,11 @@ def get_current_race_telemetry(prev_telemetry):
 
     return telemetry
 
+
 def get_current_labels():
-    """Gets the current ctrls from the WiiMote."""
+    """
+    Gets the current ctrls from the WiiMote.
+    """
     controller_inputs = get_data_point(BASE_ADDRS["controller_base"], 0x61, "u8", deref=True)
     controller_steer = get_data_point(BASE_ADDRS["controller_base"], 0x3C, "u8", deref=True)
 
@@ -149,15 +167,22 @@ def get_current_labels():
 
     return normalised_labels
 
+
 def write_data(data_list, filepath):
-    """Writes list of data to the given file."""
+    """
+    Writes list of data to the given file.
+    """
     try:
         with open(filepath, "a") as file:
             file.write(",".join(list(map(str, data_list))) + "\n")
     except Exception as e:
         print(e)
 
+
 def draw_gui(telemetry, labels, frame_count):
+    """
+    Draws stats to the top left of the screen.
+    """
     # Telemetry
     environment_inputs = [f"{ctrl}: {state}" for ctrl, state in telemetry.items()]
     gui.draw_text((10, 10), 0xffff0000, "\n".join(environment_inputs))
@@ -169,14 +194,19 @@ def draw_gui(telemetry, labels, frame_count):
     # Frame count
     gui.draw_text((10, 210), 0xffff0000, f"frame: {frame_count}")
 
+
 async def main():
-    """Main function."""
+    """
+    Main function.
+    """
     # Initialise
     global prev_telemetry, prev_labels
     last_game_loaded = False
     last_game_id = None
     last_in_race = False
     last_is_paused = False
+
+    total_inputs, total_labels = [], []
     frame_count = 0
 
     while True:
@@ -245,15 +275,19 @@ async def main():
         frame_count += 1
         telemetry["frame"] = frame_count
 
-        # Federated Data Writing (ONCE THEN DELETED)
-        write_data(telemetry.values(), FED_INPUTS_FILE_PATH)
-        write_data(labels.values(), FED_LABELS_FILE_PATH)
-
-        # Centralised Data Writing (PERSISTS)
-        write_data(telemetry.values(), CEN_INPUTS_FILE_PATH)
-        write_data(labels.values(), CEN_LABELS_FILE_PATH)
+        # Add data to be written later 
+        total_inputs.append(telemetry.values())
+        total_labels.append(labels.values())
 
         await event.frameadvance()
+    
+    # Federated Data Writing (ONCE THEN DELETED)
+    write_data(total_inputs, FED_INPUTS_FILE_PATH)
+    write_data(total_labels, FED_LABELS_FILE_PATH)
+
+    # Centralised Data Writing (PERSISTS)
+    write_data(total_inputs, CEN_INPUTS_FILE_PATH)
+    write_data(total_labels, CEN_LABELS_FILE_PATH)
 
 
 if __name__ == "__main__":
