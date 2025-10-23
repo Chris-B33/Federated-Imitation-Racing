@@ -1,6 +1,5 @@
 from dolphin import memory, event, gui
 
-
 BASE_ADDRS = {
     "game_base": 0x80000000,
     "player_base": 0x809C18F8,
@@ -21,6 +20,7 @@ prev_telemetry = {
     "accel": 0,
     "lap": 1,
 }
+
 prev_labels = {
     "1": 0,
     "2": 0,
@@ -205,8 +205,6 @@ async def main():
     last_game_id = None
     last_in_race = False
     last_is_paused = False
-
-    total_inputs, total_labels = [], []
     frame_count = 0
 
     while True:
@@ -264,7 +262,7 @@ async def main():
 
         # Stop recording after race is done
         if telemetry["lap"] > 3.0:
-            event.frameadvance()
+            await event.frameadvance()
             continue
 
         # Overwrite prev
@@ -275,20 +273,16 @@ async def main():
         frame_count += 1
         telemetry["frame"] = frame_count
 
-        # Add data to be written later 
-        total_inputs.append(telemetry.values())
-        total_labels.append(labels.values())
+        # Federated Data Writing (ONCE THEN DELETED)
+        write_data(telemetry.values(), FED_INPUTS_FILE_PATH)
+        write_data(labels.values(), FED_LABELS_FILE_PATH)
+
+        # Centralised Data Writing (PERSISTS)
+        write_data(telemetry.values(), CEN_INPUTS_FILE_PATH)
+        write_data(labels.values(), CEN_LABELS_FILE_PATH)
 
         await event.frameadvance()
     
-    # Federated Data Writing (ONCE THEN DELETED)
-    write_data(total_inputs, FED_INPUTS_FILE_PATH)
-    write_data(total_labels, FED_LABELS_FILE_PATH)
-
-    # Centralised Data Writing (PERSISTS)
-    write_data(total_inputs, CEN_INPUTS_FILE_PATH)
-    write_data(total_labels, CEN_LABELS_FILE_PATH)
-
 
 if __name__ == "__main__":
     await main()
