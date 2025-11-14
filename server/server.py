@@ -1,0 +1,75 @@
+from flask import Flask, request, Response, jsonify
+from datetime import datetime
+import os
+import logging
+import torch
+import torch.nn as nn
+
+import lib.federated as fe
+import shared.encryption as en
+import shared.preprocessing as pp
+
+
+MODEL_FOLDER = "/app/models"
+GLOBAL_MODEL_PATH = f"{MODEL_FOLDER}/federated_model.pt"
+
+app = Flask(__name__)
+os.makedirs(MODEL_FOLDER, exist_ok=True)
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    """
+    Health check before opening client on compose
+    If the global model file doesn't exist, generate it on the fly.
+    """
+    try:
+        if not os.path.exists(GLOBAL_MODEL_PATH) or os.path.getsize(GLOBAL_MODEL_PATH) == 0:
+            model = pp.generate_base_model()
+            torch.save(model.state_dict(), GLOBAL_MODEL_PATH)
+        return jsonify({"status": "ready"}), 200
+    except Exception as e:
+        return jsonify({"status": "loading", "error": str(e)}), 503
+
+
+@app.route("/download_model", methods=["GET"])
+def send_model():
+    """
+    Send gloal model to client and generate basic model if needed.
+    """
+    try:
+        model = pp.generate_base_model()
+
+        if not os.path.exists(GLOBAL_MODEL_PATH) or os.path.getsize(GLOBAL_MODEL_PATH) == 0:
+            torch.save(model.state_dict(), GLOBAL_MODEL_PATH)
+        else:
+            model.load_state_dict(torch.load(GLOBAL_MODEL_PATH, map_location="cpu"))
+
+        encoded_model = en.encode_model(model.state_dict())
+        return Response(encoded_model, mimetype="application/octet-stream")
+    except Exception as e:
+        return str(e), 500
+
+
+@app.route("/upload_model", methods=["POST"])
+def receive_model():
+    """
+    Receive updated model from client and overwrite global PyTorch model weights.
+    """
+    try:
+        if "file" not in request.files:
+            return "No file uploaded", 400
+
+        file = request.files["file"]
+        encoded = file.read()
+        state_dict = en.decode_model(encoded)
+        torch.save(state_dict, GLOBAL_MODEL_PATH)
+
+        return "Model uploaded and global model updated", 200
+
+    except Exception as e:
+        return str(e), 500
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)

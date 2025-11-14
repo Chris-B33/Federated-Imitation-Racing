@@ -1,1 +1,6 @@
 flask
+gunicorn
+pandas
+joblib
+scikit-learn
+requests
