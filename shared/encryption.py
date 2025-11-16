@@ -1,28 +1,20 @@
 import io
 import base64
-import joblib
-
 import torch
-import torch.nn as nn
 
-
-def encode_model(model) -> bytes:
+def encode_model(state_dict: dict) -> bytes:
     """
-    Serialize a Python model object into base64-encoded bytes.
-    Suitable for sending via HTTP or saving compactly.
+    Encode a PyTorch state_dict into base64 bytes.
     """
     buffer = io.BytesIO()
-    joblib.dump(model, buffer)
+    torch.save(state_dict, buffer)
     buffer.seek(0)
-    encoded = base64.b64encode(buffer.read())
-    return encoded
+    return base64.b64encode(buffer.read())
 
-
-def decode_model(encoded_model: bytes) -> nn.Module:
+def decode_model(encoded_bytes: bytes) -> dict:
     """
-    Decode base64-encoded bytes back into a Python model object.
+    Decode base64 bytes back into a PyTorch state_dict.
     """
-    raw = base64.b64decode(encoded_model)
+    raw = base64.b64decode(encoded_bytes)
     buffer = io.BytesIO(raw)
-    model = joblib.load(buffer)
-    return model
+    return torch.load(buffer, map_location="cpu", weights_only=False)

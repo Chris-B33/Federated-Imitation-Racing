@@ -4,6 +4,7 @@ from datetime import datetime
 
 import torch
 import torch.nn as nn
+from torch.utils.data import TensorDataset, DataLoader
 
 import shared.preprocessing as pp
 import shared.encryption as en
@@ -27,15 +28,48 @@ def get_global_model():
     url = f"{SERVER_URL}/download_model"
     response = requests.get(url)
     response.raise_for_status()
-
-    decoded_state_dict = en.decode_model(response.content)
+    
+    sd_bytes = response.content
+    sd = en.decode_model(sd_bytes)
 
     model = pp.generate_base_model()
-    model.load_state_dict(decoded_state_dict)
+    model.load_state_dict(sd)
+
     return model
 
 
 def update_model(model, inputs_path, labels_path, optimiser, criterion, epochs, batch_size):
+    """device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = model.to(device)
+
+    updated_model = model
+
+    inputs = pd.read_csv(inputs_path).values
+    labels = pd.read_csv(labels_path).values
+
+    normalised_inputs = pp.normalise_inputs(inputs)
+    normalised_labels = pp.normalise_labels(labels)
+
+    inputs_tensor = torch.tensor(normalised_inputs, dtype=torch.float32)
+    labels_tensor = torch.tensor(normalised_labels, dtype=torch.float32)
+
+    model.train()
+    for epoch in range(epochs):
+        total_loss = 0
+        for imgs, targets in train_loader:
+            imgs = imgs.to(device)
+            targets = targets.to(device)
+
+            preds = model(imgs)
+            loss = criterion()(preds, targets)
+            optimiser.zero_grad()
+            loss.backward()
+            optimiser.step()
+            total_loss += loss.item()
+
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss:.4f}")
+
+    return updated_model"""
     return model
 
 

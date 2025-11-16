@@ -1,5 +1,6 @@
 from flask import Flask, request, Response, jsonify
 from datetime import datetime
+import io
 import os
 import logging
 import torch
@@ -33,26 +34,27 @@ def health():
 
 
 @app.route("/download_model", methods=["GET"])
-def send_model():
+def download_model():
     """
-    Send gloal model to client and generate basic model if needed.
+    Send global model to client and generate basic model if needed.
     """
     try:
         model = pp.generate_base_model()
 
-        if not os.path.exists(GLOBAL_MODEL_PATH) or os.path.getsize(GLOBAL_MODEL_PATH) == 0:
+        if not os.path.exists(GLOBAL_MODEL_PATH):
             torch.save(model.state_dict(), GLOBAL_MODEL_PATH)
-        else:
-            model.load_state_dict(torch.load(GLOBAL_MODEL_PATH, map_location="cpu"))
 
-        encoded_model = en.encode_model(model.state_dict())
-        return Response(encoded_model, mimetype="application/octet-stream")
+        sd = torch.load(GLOBAL_MODEL_PATH, map_location="cpu")
+        encoded = en.encode_model(sd)
+
+        return Response(encoded, mimetype="application/octet-stream")
     except Exception as e:
+        print(e)
         return str(e), 500
 
 
 @app.route("/upload_model", methods=["POST"])
-def receive_model():
+def upload_model():
     """
     Receive updated model from client and overwrite global PyTorch model weights.
     """
@@ -60,16 +62,16 @@ def receive_model():
         if "file" not in request.files:
             return "No file uploaded", 400
 
-        file = request.files["file"]
-        encoded = file.read()
-        state_dict = en.decode_model(encoded)
-        torch.save(state_dict, GLOBAL_MODEL_PATH)
+        encoded = request.files["file"].read()
+        sd = en.decode_model(encoded)
+        torch.save(sd, GLOBAL_MODEL_PATH)
 
-        return "Model uploaded and global model updated", 200
+        return "Model uploaded", 200
 
     except Exception as e:
+        print(e)
         return str(e), 500
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
