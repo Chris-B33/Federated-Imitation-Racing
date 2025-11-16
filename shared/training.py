@@ -2,13 +2,12 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
-import time
 import shared.preprocessing as pp
 
 
 OPTIMISER = torch.optim.Adam
 LEARNING_RATE = 1e-3
-EPOCHS = 50
+EPOCHS = 10
 BATCH_SIZE = 256
 
 
@@ -46,7 +45,6 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
     Train the model on mini-batches with gradient clipping.
     Metrics are computed using compute_metrics().
     """
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = model.to(device)
 
@@ -96,11 +94,10 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
             )
 
         print(
-            f"Epoch {epoch+1}/{epochs} | " +
-            f"Loss: {epoch_loss/num_batches:.4f} | " +
-            f"Binary Acc: {epoch_binary_acc/num_batches:.4f} | " +
+            f"Epoch {epoch+1}/{epochs} | "
+            f"Loss: {epoch_loss/num_batches:.4f} | "
+            f"Binary Acc: {epoch_binary_acc/num_batches:.4f} | "
             f"Steer MAE: {epoch_steer_mae/num_batches:.4f}",
-            end="\n"
         )
 
     return model
