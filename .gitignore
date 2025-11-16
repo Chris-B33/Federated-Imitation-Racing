@@ -4,3 +4,4 @@ dolphin/*
 !dolphin/Scripts/
 !dolphin/Scripts/**
 .vscode/
+**/__pycache__/
