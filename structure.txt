@@ -1,6 +1,6 @@
 ┌───────────────────────────────────────────┐
 │ Dolphin (Human)                           │
-│ - Logs Telemetry (CSV per frame)          │
+│ - Logs Telemetry (CSV per frame)          │✅
 │ - Records Human Controller Inputs         │
 └──────────────────┬────────────────────────┘
                    │
@@ -8,7 +8,7 @@
 ┌───────────────────────────────────────────┐
 │ Federated Client (Docker)                 │
 │ - Loads (telemetry + actions)             │
-│ - Preprocesses data                       │
+│ - Preprocesses data                       │✅
 │ - Trains local imitation model            │
 │ - Sends local model weights → Server      │
 └──────────────────┬────────────────────────┘
@@ -17,24 +17,24 @@
 ┌───────────────────────────────────────────┐
 │ Federated Server (Docker)                 │
 │ - Aggregates updates (FedAvg)             │
-│ - Builds updated Global Federated Model   │
+│ - Builds updated Global Federated Model   │✅
 │ - Distributes global model back to clients│
 └──────────────────┬────────────────────────┘
                    │
-          ┌────────┴─────────┐
-          ▼                  ▼
-┌──────────────────────────┐  ┌──────────────────────────┐
-│ Centralized Model (Lab)  │  │ Federated Global Model   │
-│ - Trained on pooled data │  │ - Aggregated client model│
-│ - Used as comparison     │  │ - Represents avg style   │
-│ - Evaluates differences  │  │ - Used for deployment    │
-└───────────┬──────────────┘  └────────────┬─────────────┘
+          ┌────────┴───────────────────────┐
+          ▼                                ▼
+┌──────────────────────────┐     ┌──────────────────────────┐
+│ Centralized Model (Lab)  │     │ Federated Global Model   │
+│ - Trained on pooled data │     │ - Aggregated client model│
+│ - Used as comparison     │❌  │ - Represents avg style   │✅
+│ - Evaluates differences  │     │ - Used for deployment    │
+└───────────┬──────────────┘     └─────────┬────────────────┘
             │                              │
             ▼                              ▼
 ┌───────────────────────────────────────────┐
 │ Evaluation / Analysis Layer               │
 │ - Compare centralized vs federated models │
-│ - Measure divergence & accuracy           │
+│ - Measure divergence & accuracy           │❌
 │ - Tune aggregation / personalization      │
 └──────────────────┬────────────────────────┘
                    │
@@ -43,7 +43,7 @@
 │ Dolphin (AI)                              │
 │ - Feeds telemetry live                    │
 │ - Global or Centralized model outputs     │
-│   controller actions                      │
+│   controller actions                      │❌
 │ - Actions injected via controller pipe    │
 │ - Audience sees AI drive in real time     │
 └───────────────────────────────────────────┘

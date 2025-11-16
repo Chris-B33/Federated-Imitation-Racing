@@ -1,11 +1,10 @@
 # Federated-Imitation-Racing
 
 ## Description
-**Federated-Imitation-Racing** is a project that explores **supervised federated learning** applied to autonomous driving in the context of **Mario Kart Wii**.  
-The goal is to train models across multiple clients without sharing raw gameplay data, enabling privacy-preserving imitation learning of racing behavior.
-Players’ actions (steering, acceleration, and item usage) are recorded as labeled datasets. Federated learning techniques then allow multiple models to collaboratively improve by sharing gradients or model weights instead of raw gameplay data.
-
----
+**Federated-Imitation-Racing** is a project that explores **supervised federated learning** applied to autonomous driving in the context of **Mario Kart Wii**.<br>
+This project serves as a proof-of-concept for federated learning. Player actions—such as steering, acceleration, and item usage—are recorded as labeled datasets.<br> 
+While the project currently does not use multiple physical clients, it simulates multiple clients by training separate models on local datasets.<br> 
+Federated learning techniques then allow these models to collaboratively improve by sharing model weights or gradients, rather than raw gameplay data, preserving privacy while improving performance.
 
 ## Features
 - **Federated Learning:** Train models across multiple clients without centralizing sensitive gameplay data.
@@ -13,7 +12,6 @@ Players’ actions (steering, acceleration, and item usage) are recorded as labe
 - **Privacy-Preserving:** Only model are shared; raw data remain local.
 - **Simulation-Compatible:** Works with Mario Kart Wii gameplay data recorded from Dolphin emulator or other sources.
 
----
 
 ## Installation
 
@@ -34,8 +32,8 @@ Before running the project, make sure you have the following installed on your s
 ### Training models
 1. **Record your game data**
     - Start Dolphin.
-    - Load Mario Kart Wii.
-    - Run logging.py
+    - Load Mario Kart Wii (PAL).
+    - Run race_data.py through the scripting interface of Dolphin.
 2. **Run the compose**
     - ```bash
       docker compose up
