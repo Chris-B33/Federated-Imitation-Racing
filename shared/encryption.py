@@ -17,4 +17,4 @@ def decode_model(encoded_bytes: bytes) -> dict:
     """
     raw = base64.b64decode(encoded_bytes)
     buffer = io.BytesIO(raw)
-    return torch.load(buffer, map_location="cpu", weights_only=False)
+    return torch.load(buffer, map_location="cpu", weights_only=True)

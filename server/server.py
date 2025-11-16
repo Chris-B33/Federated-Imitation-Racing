@@ -39,15 +39,15 @@ def download_model():
     Send global model to client and generate basic model if needed.
     """
     try:
-        model = pp.generate_base_model()
-
-        if not os.path.exists(GLOBAL_MODEL_PATH):
+        if not os.path.exists(GLOBAL_MODEL_PATH) or os.path.getsize(GLOBAL_MODEL_PATH) == 0:
+            model = pp.generate_base_model()
             torch.save(model.state_dict(), GLOBAL_MODEL_PATH)
-
-        sd = torch.load(GLOBAL_MODEL_PATH, map_location="cpu")
+        
+        sd = torch.load(GLOBAL_MODEL_PATH, map_location="cpu", weights_only=True)
+        
         encoded = en.encode_model(sd)
-
         return Response(encoded, mimetype="application/octet-stream")
+
     except Exception as e:
         print(e)
         return str(e), 500
@@ -55,9 +55,6 @@ def download_model():
 
 @app.route("/upload_model", methods=["POST"])
 def upload_model():
-    """
-    Receive updated model from client and overwrite global PyTorch model weights.
-    """
     try:
         if "file" not in request.files:
             return "No file uploaded", 400
@@ -67,7 +64,6 @@ def upload_model():
         torch.save(sd, GLOBAL_MODEL_PATH)
 
         return "Model uploaded", 200
-
     except Exception as e:
         print(e)
         return str(e), 500

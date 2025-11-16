@@ -33,7 +33,7 @@ def send_model(model):
     """
     Send trained model to server
     """
-    encoded = en.encode_model(model)
+    encoded = en.encode_model(model.state_dict())
     url = f"{SERVER_URL}/upload_model"
     files = {"file": ("model.pt", encoded)}
     response = requests.post(url, files=files)
