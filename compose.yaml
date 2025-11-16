@@ -21,3 +21,4 @@ services:
         condition: service_healthy
     volumes:
       - ./shared:/app/shared
+      - ./client/data:/app/data
