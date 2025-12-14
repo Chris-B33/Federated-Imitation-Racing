@@ -7,10 +7,14 @@ import lib.utils as ut
 
 import shared.encryption as en
 import shared.preprocessing as pp
+import shared.training as tr
 
 
 MODEL_FOLDER = "/app/models"
-GLOBAL_MODEL_PATH = f"{MODEL_FOLDER}/federated_model.pt"
+FED_MODEL_PATH = f"{MODEL_FOLDER}/federated_model.pt"
+CENTRAL_MODEL_PATH = f"{MODEL_FOLDER}/centralised_model.pt"
+CENTRAL_INPUTS_PATH = f"data/inputs.csv"
+CENTRAL_LABELS_PATH = f"data/labels.csv"
 
 app = Flask(__name__)
 os.makedirs(MODEL_FOLDER, exist_ok=True)
@@ -23,9 +27,9 @@ def health():
     If the global model file doesn't exist, generate it on the fly.
     """
     try:
-        if not os.path.exists(GLOBAL_MODEL_PATH) or os.path.getsize(GLOBAL_MODEL_PATH) == 0:
+        if not os.path.exists(FED_MODEL_PATH) or os.path.getsize(FED_MODEL_PATH) == 0:
             model = pp.generate_base_model()
-            torch.save(model.state_dict(), GLOBAL_MODEL_PATH)
+            torch.save(model.state_dict(), FED_MODEL_PATH)
         return jsonify({"status": "ready"}), 200
     except Exception as e:
         return jsonify({"status": "loading", "error": str(e)}), 503
@@ -37,11 +41,11 @@ def download_model():
     Send global model to client and generate basic model if needed.
     """
     try:
-        if not os.path.exists(GLOBAL_MODEL_PATH) or os.path.getsize(GLOBAL_MODEL_PATH) == 0:
+        if not os.path.exists(FED_MODEL_PATH) or os.path.getsize(FED_MODEL_PATH) == 0:
             model = pp.generate_base_model()
-            torch.save(model.state_dict(), GLOBAL_MODEL_PATH)
+            torch.save(model.state_dict(), FED_MODEL_PATH)
         
-        sd = torch.load(GLOBAL_MODEL_PATH, map_location="cpu", weights_only=True)
+        sd = torch.load(FED_MODEL_PATH, map_location="cpu", weights_only=True)
         
         encoded = en.encode_model(sd)
         return Response(encoded, mimetype="application/octet-stream")
@@ -73,11 +77,26 @@ def upload_model():
 
         model_files = [f for f in os.listdir(f"{MODEL_FOLDER}/to_be_federated") if f.endswith(".pt")]
         if len(model_files) >= 3:
+            # Train federated model
             to_aggregate = [os.path.join(f"{MODEL_FOLDER}/to_be_federated", f) for f in model_files]
             aggregated_path = os.path.join(MODEL_FOLDER, "federated_model.pt")
             fe.aggregate_models(to_aggregate, aggregated_path)
             for p in to_aggregate:
                 os.remove(p)
+
+            # Train centralised model
+            if not os.path.exists(CENTRAL_MODEL_PATH) or os.path.getsize(CENTRAL_MODEL_PATH) == 0:
+                central_model = pp.generate_base_model()
+                torch.save(central_model.state_dict(), CENTRAL_MODEL_PATH)
+        
+            central_model = torch.load(CENTRAL_MODEL_PATH, map_location="cpu", weights_only=True)
+            central_model = tr.update_model(
+                central_model,
+                CENTRAL_INPUTS_PATH,
+                CENTRAL_LABELS_PATH
+            )
+            torch.save(central_model.state_dict(), CENTRAL_MODEL_PATH)
+
             return f"Model: {name} was uploaded, enough models found to aggregate", 200
         else:
             return f"Model: {name} is uploaded", 200

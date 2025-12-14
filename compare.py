@@ -1,0 +1,2 @@
+VAL_INPUTS_PATH = f""
+VAL_LABELS_PATH = f""

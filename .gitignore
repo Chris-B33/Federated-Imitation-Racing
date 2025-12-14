@@ -1,5 +1,5 @@
-client/data/
-server/data/
+
+
 dolphin/*
 !dolphin/Scripts/
 !dolphin/Scripts/**

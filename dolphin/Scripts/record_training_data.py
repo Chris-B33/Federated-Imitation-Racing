@@ -1,3 +1,9 @@
+"""
+This script records training data for a client.
+It appends to the server data, as this will be a centralised model database.
+It resets and writes over the client data, as this will be for a federated models database.
+"""
+
 from dolphin import memory, event, gui
 
 BASE_ADDRS = {
@@ -197,7 +203,7 @@ def draw_gui(telemetry, labels, frame_count):
 
 async def main():
     """
-    Main function.
+    Main data recording function.
     """
     # Initialise
     global prev_telemetry, prev_labels
