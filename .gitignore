@@ -1,5 +1,6 @@
-
-
+client/data
+server/data
+shared/val_data
 dolphin/*
 !dolphin/Scripts/
 !dolphin/Scripts/**
