@@ -1,6 +1,7 @@
 from flask import Flask, request, Response, jsonify
 import os
 import torch
+from datetime import datetime
 
 import lib.federated as fe
 import lib.utils as ut
@@ -77,6 +78,7 @@ def upload_model():
 
         model_files = [f for f in os.listdir(f"{MODEL_FOLDER}/to_be_federated") if f.endswith(".pt")]
         if len(model_files) >= 3:
+            print(f"[+][{datetime.now().strftime('%H:%M:%S')}] Enough models to aggregate!", flush=True)
             # Train federated model
             to_aggregate = [os.path.join(f"{MODEL_FOLDER}/to_be_federated", f) for f in model_files]
             aggregated_path = os.path.join(MODEL_FOLDER, "federated_model.pt")
@@ -96,6 +98,10 @@ def upload_model():
                 CENTRAL_LABELS_PATH
             )
             torch.save(central_model.state_dict(), CENTRAL_MODEL_PATH)
+
+            # Remove server dataset
+            os.remove(CENTRAL_INPUTS_PATH)
+            os.remove(CENTRAL_LABELS_PATH)
 
             return f"Model: {name} was uploaded, enough models found to aggregate", 200
         else:

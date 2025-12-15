@@ -6,3 +6,4 @@ dolphin/*
 !dolphin/Scripts/**
 .vscode/
 **/__pycache__/
+models/**/*.pt

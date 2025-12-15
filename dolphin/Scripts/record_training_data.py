@@ -195,10 +195,10 @@ def draw_gui(telemetry, labels, frame_count):
 
     # Labels
     controller_inputs = [f"{ctrl}: {state}" for ctrl, state in labels.items()]
-    gui.draw_text((10, 95), 0xffff0000, "\n".join(controller_inputs))
+    gui.draw_text((10, 115), 0xffff0000, "\n".join(controller_inputs))
 
     # Frame count
-    gui.draw_text((10, 210), 0xffff0000, f"frame: {frame_count}")
+    gui.draw_text((10, 250), 0xffff0000, f"frame: {frame_count}")
 
 
 async def main():

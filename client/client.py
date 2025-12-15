@@ -1,3 +1,4 @@
+import os
 import requests
 from datetime import datetime
 
@@ -58,6 +59,10 @@ def main():
 
         print(f"[+][{datetime.now().strftime('%H:%M:%S')}] Sending model to server...", flush=True)
         send_model(model)
+
+        # del data after
+        os.remove("data/inputs.csv")
+        os.remove("data/labels.csv")
 
     except Exception as e:
         print(f"[+][{datetime.now().strftime('%H:%M:%S')}][ERROR] {e}", flush=True)
