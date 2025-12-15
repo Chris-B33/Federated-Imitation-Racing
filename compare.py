@@ -17,8 +17,8 @@ import shared.training as tr
 MODEL_FOLDER = f"models"
 FED_MODEL_PATH = f"{MODEL_FOLDER}/federated_model.pt"
 CEN_MODEL_PATH = f"{MODEL_FOLDER}/centralised_model.pt"
-VAL_INPUTS_PATH = f"shared/val_data"
-VAL_LABELS_PATH = f"shared/val_data"
+VAL_INPUTS_PATH = f"shared/val_data/inputs.csv"
+VAL_LABELS_PATH = f"shared/val_data/labels.csv"
 
 BINARY_OUTPUTS = 7
 
@@ -49,9 +49,17 @@ def evaluate_model(model, data_loader):
 
 
 if __name__ == "__main__":
-    # Load both model
-    fed_model = torch.load(FED_MODEL_PATH, map_location="cpu", weights_only=True)
-    cen_model = torch.load(CEN_MODEL_PATH, map_location="cpu", weights_only=True)
+    # Initialise models
+    fed_model = pp.generate_base_model()
+    cen_model = pp.generate_base_model()
+
+    # Load both model dicts
+    fed_dicts = torch.load(FED_MODEL_PATH, map_location="cpu", weights_only=True)
+    cen_dicts = torch.load(CEN_MODEL_PATH, map_location="cpu", weights_only=True)
+
+    # Load model states
+    fed_model.load_state_dict(fed_dicts)
+    cen_model.load_state_dict(cen_dicts)
 
     # gather inputs
     inputs = pd.read_csv(VAL_INPUTS_PATH)
@@ -86,7 +94,6 @@ if __name__ == "__main__":
         # STEER outputs
         fed_steer = fed_model(inputs_tensor)[:, BINARY_OUTPUTS].cpu().numpy()
         cen_steer = cen_model(inputs_tensor)[:, BINARY_OUTPUTS].cpu().numpy()
-        true_steer = labels_tensor[:, BINARY_OUTPUTS].cpu().numpy()
 
     # Metrics to compare
     metrics_names = ["loss", "binary_acc", "steer_mae"]
@@ -118,17 +125,5 @@ if __name__ == "__main__":
     plt.ylabel("Accuracy")
     plt.title("Per-Button Accuracy Comparison")
     plt.ylim(0, 1)
-    plt.legend()
-    plt.show()
-
-    # STEER scatter plot
-    plt.figure(figsize=(6,6))
-    plt.scatter(true_steer, fed_steer, alpha=0.5, label="Federated")
-    plt.scatter(true_steer, cen_steer, alpha=0.5, label="Centralised")
-    plt.plot([true_steer.min(), true_steer.max()],
-             [true_steer.min(), true_steer.max()], 'k--', label="Ideal")
-    plt.xlabel("True STEER")
-    plt.ylabel("Predicted STEER")
-    plt.title("STEER Prediction: True vs Predicted")
     plt.legend()
     plt.show()
