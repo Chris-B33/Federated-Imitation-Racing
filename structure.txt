@@ -26,7 +26,7 @@
 ┌──────────────────────────┐     ┌──────────────────────────┐
 │ Centralized Model (Lab)  │     │ Federated Global Model   │
 │ - Trained on pooled data │     │ - Aggregated client model│
-│ - Used as comparison     │❌  │ - Represents avg style   │✅
+│ - Used as comparison     │✅  │ - Represents avg style   │✅
 │ - Evaluates differences  │     │ - Used for deployment    │
 └───────────┬──────────────┘     └─────────┬────────────────┘
             │                              │
@@ -34,7 +34,7 @@
 ┌───────────────────────────────────────────┐
 │ Evaluation / Analysis Layer               │
 │ - Compare centralized vs federated models │
-│ - Measure divergence & accuracy           │❌
+│ - Measure divergence & accuracy           │⏳
 │ - Tune aggregation / personalization      │
 └──────────────────┬────────────────────────┘
                    │

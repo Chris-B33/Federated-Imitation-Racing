@@ -39,6 +39,7 @@ Before running the project, make sure you have the following installed on your s
     - Play some races.
 2. **Run the compose**
     - ```bash
+      docker compose build
       docker compose up
     - This will train and send a model to the central server.
 3. **Repeat at least 3 times**
@@ -46,8 +47,8 @@ Before running the project, make sure you have the following installed on your s
     - At the same time, the centralised model will be trained on all that data together at once.
     - Then it will reset its data too to make a fair comparison.
 4. **Gather validation data**
-    - Run record_training_data.py through the scripting interface of Dolphin.
+    - Run record_validation_data.py through the scripting interface of Dolphin.
     - Play some races.
 5. **Run comparison**
     - Run compare.py
-    - This uses that validation data on both models and compares performance.
+    - This pipes the validation data through each model and compares performance.
