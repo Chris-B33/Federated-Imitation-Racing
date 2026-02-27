@@ -40,6 +40,27 @@ def compute_metrics(preds: torch.Tensor, labels: torch.Tensor, binary_cols_count
     }
 
 
+def scale_model_weights(model, framecount, lap_completion, target_frame=3500, target_lap=3, scale_min=0.8, scale_max=1.2):
+    """
+    Scale all model weights based on framecount/lap_completion performance.
+    Keeps relative weight ratios intact.
+    """
+    # Compute target ratio and current ratio
+    target_ratio = target_frame / target_lap
+    current_ratio = framecount / lap_completion
+    
+    # Compute scale factor and clip
+    scale_factor = max(scale_min, min(scale_max, current_ratio / target_ratio))
+    
+    # Apply scaling to all parameters
+    with torch.no_grad():
+        for param in model.parameters():
+            param.mul_(scale_factor)
+    
+    print(f"Scaling model by factor: {scale_factor:.4f} based on performance metrics")
+    return model
+
+
 def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EPOCHS, batch_size=BATCH_SIZE, learning_rate=LEARNING_RATE):
     """
     Train the model on mini-batches with gradient clipping.
@@ -99,5 +120,15 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
             f"Binary Acc: {epoch_binary_acc/num_batches:.4f} | "
             f"Steer MAE: {epoch_steer_mae/num_batches:.4f}",
         )
+
+    model = scale_model_weights(
+        model,
+        framecount=inputs.iloc[-1]['framecount'],
+        lap_completion=inputs.iloc[-1]['lap_completion'],
+        target_frame=3500,
+        target_lap=3,
+        scale_min=0.5,
+        scale_max=1.5
+    )
 
     return model
