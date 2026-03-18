@@ -20,12 +20,20 @@ def generate_base_model(input_dim=7, output_dim=8, hidden_layers=[128, 64], acti
     return model
 
 
-def normalise_inputs(df: pd.DataFrame) -> pd.DataFrame:
+def normalise_inputs(df: pd.DataFrame, col_min=None, col_max=None) -> pd.DataFrame:
     """
-    Normalise input features using min-max scaling per column.
-    Returns a DataFrame of the same shape and columns.
+    Normalise input features using min-max scaling.
+
+    If col_min and col_max are provided (from training data),
+    they will be used instead of computing them from df.
     """
-    df_norm = (df - df.min()) / (df.max() - df.min())
+
+    if col_min is None or col_max is None:
+        col_min = df.min()
+        col_max = df.max()
+
+    df_norm = (df - col_min) / (col_max - col_min)
+
     return df_norm.fillna(0)
 
 
