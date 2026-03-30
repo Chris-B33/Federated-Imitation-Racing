@@ -35,7 +35,7 @@ Before running the project, make sure you have the following installed on your s
 1. **Record your game data**
     - Start Dolphin.
     - Load Mario Kart Wii (PAL).
-    - Run record_training_data.py through the scripting interface of Dolphin.
+    - Run "record_training_data.py" through the scripting interface of Dolphin.
     - Play some races.
 2. **Run the compose**
     - ```bash
@@ -47,10 +47,10 @@ Before running the project, make sure you have the following installed on your s
     - At the same time, the centralised model will be trained on all that data together at once.
     - Then it will reset its data too to make a fair comparison.
 4. **Gather validation data**
-    - Run record_validation_data.py through the scripting interface of Dolphin.
+    - Run "record_validation_data.py" through the scripting interface of Dolphin.
     - Play some races.
 5. **Run comparison**
-    - Run compare.py
+    - Run "compare.py".
     - This pipes the validation data through each model and compares performance.
 
 ### Playing Model Live
