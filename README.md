@@ -52,3 +52,14 @@ Before running the project, make sure you have the following installed on your s
 5. **Run comparison**
     - Run compare.py
     - This pipes the validation data through each model and compares performance.
+
+### Playing Model Live
+1. **Setup game**
+    - Start Dolphin.
+    - Load Mario Kart Wii (PAL).
+    - Get ready to play race.
+2. **Run model live**
+    - Run the "run_model_live_server.py" script externally.
+    - Run the "run_model_live_emu.py" through the Dolphin scripting interface.
+    - Set the model based on MODEL_NAME in the server script.
+    - Load into the race and watch the named model play live.
