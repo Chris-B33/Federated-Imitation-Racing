@@ -5,7 +5,7 @@ This script runs a given model.
 ***WIIMOTE 1 MUST BE SET TO EMULATED WIIMOTE IN CONTROLLER OPTIONS.***
 """
 
-from dolphin import memory, event, gui
+from dolphin import memory, event, gui, controller
 import socket
 
 HOST = "127.0.0.1"
@@ -188,7 +188,21 @@ async def apply_controls(ctrls):
     '''
     Given the output of the model (desired ctrls), apply them in-game
     '''
-    print(ctrls)
+    # Buttons
+    mapped_ctrls = { 
+        "Two":   bool(ctrls[0]),
+        "One":   bool(ctrls[1]),
+        "Plus":  bool(ctrls[2]),
+        "Up":    bool(ctrls[3]),
+        "Down":  bool(ctrls[4]),
+        "Left":  bool(ctrls[5]),
+        "Right": bool(ctrls[6]),
+    }
+    controller.set_wiimote_buttons(0, mapped_ctrls)
+
+    # Steering
+    steer = (ctrls[7] * 1.4) - 9.8
+    controller.set_wiimote_acceleration(0, 0, steer, 1)
 
 
 async def main():
@@ -266,6 +280,7 @@ async def main():
         # Get outputs of model
         outputs = client.recv(1024)
         parts = outputs.decode().split()
+        print(parts)
         ctrls = [round(float(x)) for x in parts]
 
         # Use outputs as controls
