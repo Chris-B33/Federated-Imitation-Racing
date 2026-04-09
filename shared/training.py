@@ -2,37 +2,50 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
+
 import shared.preprocessing as pp
 
 
 OPTIMISER = torch.optim.Adam
-LEARNING_RATE = 1e-3
-EPOCHS = 10
+LEARNING_RATE = 1e-4
+EPOCHS = 25
 BATCH_SIZE = 256
 
 
-def compute_metrics(preds: torch.Tensor, labels: torch.Tensor, binary_cols_count: int):
+import torch
+import torch.nn as nn
+
+def compute_metrics(preds: torch.Tensor, labels: torch.Tensor, binary_cols_count: int, loss_weights=(1.0, 0.5)):
     """
-    Compute metrics for mixed outputs: binary buttons + continuous steer.
+    Compute losses and metrics for mixed outputs:
+      - binary buttons
+      - continuous tilt
     """
     preds_binary = preds[:, :binary_cols_count]
     preds_steer = preds[:, binary_cols_count:]
+    
     labels_binary = labels[:, :binary_cols_count]
     labels_steer = labels[:, binary_cols_count:]
-
+    
+    # Losses
     criterion_binary = nn.BCEWithLogitsLoss()
     criterion_cont = nn.MSELoss()
+    
     loss_binary = criterion_binary(preds_binary, labels_binary)
-    loss_steer = criterion_cont(preds_steer.squeeze(), labels_steer.squeeze())
-    total_loss = loss_binary + loss_steer
-
+    loss_steer = criterion_cont(preds_steer, labels_steer)
+    
+    # Weighted sum
+    total_loss = loss_weights[0] * loss_binary + loss_weights[1] * loss_steer
+    
     with torch.no_grad():
+        # Binary accuracy
         preds_bin_sig = torch.sigmoid(preds_binary)
         pred_labels = (preds_bin_sig > 0.5).float()
         binary_acc = (pred_labels == labels_binary).float().mean().item()
-
-        steer_mae = torch.mean(torch.abs(preds_steer.squeeze() - labels_steer.squeeze())).item()
-
+        
+        # Steer MAE
+        steer_mae = torch.mean(torch.abs(preds_steer - labels_steer)).item()
+    
     return {
         "loss": total_loss,
         "binary_acc": binary_acc,
@@ -83,7 +96,6 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
     num_batches = len(train_loader)
 
     instantiated_optimiser = optimiser(model.parameters(), lr=learning_rate)
-    binary_cols_count = labels_tensor.shape[1] - 1
 
     model.train()
     for epoch in range(epochs):
@@ -94,7 +106,8 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
         for i, (batch_inputs, batch_labels) in enumerate(train_loader):
             batch_inputs, batch_labels = batch_inputs.to(device), batch_labels.to(device)
             preds = model(batch_inputs)
-            metrics = compute_metrics(preds, batch_labels, binary_cols_count)
+            labels_norm = pp.normalise_labels(labels, binary_cols_count=7)
+            metrics = compute_metrics(preds, batch_labels, binary_cols_count=7, loss_weights=(1.0, 0.5))
 
             instantiated_optimiser.zero_grad()
             total_loss = metrics["loss"]
@@ -102,12 +115,12 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             instantiated_optimiser.step()
 
-            epoch_loss += metrics["loss"]
+            epoch_loss += metrics["loss"].item()
             epoch_binary_acc += metrics["binary_acc"]
             epoch_steer_mae += metrics["steer_mae"]
 
             print(
-                f"Epoch {(epoch+1):02d} | "
+                f"Epoch {(epoch+1):02d}/{epochs} | "
                 f"Batch: {(i+1):02d}/{num_batches} | "
                 f"Loss: {metrics['loss']:.4f} | "
                 f"Binary Acc: {metrics['binary_acc']:.4f} | "
@@ -121,7 +134,7 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
             f"Steer MAE: {epoch_steer_mae/num_batches:.4f}",
         )
 
-    model = scale_model_weights(
+    """model = scale_model_weights(
         model,
         framecount=inputs.iloc[-1]['framecount'],
         lap_completion=inputs.iloc[-1]['lap_completion'],
@@ -129,6 +142,6 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
         target_lap=3,
         scale_min=0.5,
         scale_max=1.5
-    )
+    )"""
 
     return model

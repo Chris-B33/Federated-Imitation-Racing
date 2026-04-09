@@ -1,6 +1,7 @@
 from flask import Flask, request, Response, jsonify
 import os
 import torch
+import traceback
 from datetime import datetime
 
 import lib.federated as fe
@@ -52,7 +53,7 @@ def download_model():
         return Response(encoded, mimetype="application/octet-stream")
 
     except Exception as e:
-        print(e)
+        traceback.print_tb(f"[+][{datetime.now().strftime('%H:%M:%S')}] [ERROR]: {e.__traceback__}")
         return str(e), 500
 
 
@@ -91,7 +92,9 @@ def upload_model():
                 central_model = pp.generate_base_model()
                 torch.save(central_model.state_dict(), CENTRAL_MODEL_PATH)
         
-            central_model = torch.load(CENTRAL_MODEL_PATH, map_location="cpu", weights_only=True)
+            central_model_weights = torch.load(CENTRAL_MODEL_PATH, map_location="cpu", weights_only=True)
+            central_model.load_state_dict(central_model_weights)
+
             central_model = tr.update_model(
                 central_model,
                 CENTRAL_INPUTS_PATH,

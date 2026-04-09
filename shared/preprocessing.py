@@ -20,35 +20,34 @@ def generate_base_model(input_dim=7, output_dim=8, hidden_layers=[128, 64], acti
     return model
 
 
-def normalise_inputs(df: pd.DataFrame, col_min=None, col_max=None) -> pd.DataFrame:
+def normalise_inputs(df: pd.DataFrame, mean=None, std=None) -> pd.DataFrame:
     """
     Normalise input features using min-max scaling.
-
-    If col_min and col_max are provided (from training data),
-    they will be used instead of computing them from df.
     """
-
-    if col_min is None or col_max is None:
-        col_min = df.min()
-        col_max = df.max()
-
-    df_norm = (df - col_min) / (col_max - col_min)
-
+    if mean is None or std is None:
+        mean = df.mean()
+        std = df.std().replace(0, 1)  # avoid division by zero
+    
+    df_norm = (df - mean) / std
     return df_norm.fillna(0)
 
 
-def normalise_labels(df: pd.DataFrame) -> pd.DataFrame:
+def normalise_labels(df: pd.DataFrame, binary_cols_count=7, tilt_mean=None, tilt_std=None):
     """
-    Normalise output labels.
-    For multi-output regression: scale non-binary columns.
+    Z-score normalize outputs:
+      - binary outputs stay 0/1
+      - continuous tilt is normalized
     """
     df_norm = df.copy()
     
-    for col in df.columns:
-        col_min = df[col].min()
-        col_max = df[col].max()
-        if col_max != col_min:
-            df_norm[col] = (df[col] - col_min) / (col_max - col_min)
-        else:
-            df_norm[col] = 0.0
+    df_norm.iloc[:, :binary_cols_count] = df.iloc[:, :binary_cols_count]
+    
+    tilt_col = df.columns[binary_cols_count]
+    
+    if tilt_mean is None or tilt_std is None:
+        tilt_mean = df[tilt_col].mean()
+        tilt_std = df[tilt_col].std() or 1.0
+    
+    df_norm[tilt_col] = (df[tilt_col] - tilt_mean) / tilt_std
+    
     return df_norm.fillna(0)

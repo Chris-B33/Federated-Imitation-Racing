@@ -1,5 +1,6 @@
 import os
 import requests
+import traceback
 from datetime import datetime
 
 import shared.preprocessing as pp
@@ -56,7 +57,7 @@ def main():
             inputs_path=INPUTS_PATH,
             labels_path=LABELS_PATH
         )
-
+        
         print(f"[+][{datetime.now().strftime('%H:%M:%S')}] Sending model to server...", flush=True)
         send_model(model)
 
@@ -65,7 +66,8 @@ def main():
         os.remove("data/labels.csv")
 
     except Exception as e:
-        print(f"[+][{datetime.now().strftime('%H:%M:%S')}][ERROR] {e}", flush=True)
+        traceback.print_tb(f"[+][{datetime.now().strftime('%H:%M:%S')}] [ERROR]: {e.__traceback__}")
+        
 
 
 if __name__ == "__main__":
