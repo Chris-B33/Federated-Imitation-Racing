@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     # gather inputs
     inputs = pd.read_csv(VAL_INPUTS_PATH)
-    labels = pd.read_csv(VAL_INPUTS_PATH)
+    labels = pd.read_csv(VAL_LABELS_PATH)
 
     inputs_norm = pp.normalise_inputs(inputs)
     labels_norm = pp.normalise_labels(labels)
