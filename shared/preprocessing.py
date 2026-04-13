@@ -1,8 +1,12 @@
 import pandas as pd
 import torch.nn as nn
 
+INPUT_DIM = 6
+OUTPUT_DIM = 8
+BINARY_OUTPUTS = 7
 
-def generate_base_model(input_dim=7, output_dim=8, hidden_layers=[128, 64], activation=nn.ReLU) -> nn.Module:
+
+def generate_base_model(input_dim=INPUT_DIM, output_dim=OUTPUT_DIM, hidden_layers=[128, 64], activation=nn.ReLU) -> nn.Module:
     """
     Create a base model of set architecture for centralised and federated model to use.
     """

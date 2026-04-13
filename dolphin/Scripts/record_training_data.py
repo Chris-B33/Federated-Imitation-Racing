@@ -277,7 +277,6 @@ async def main():
 
         # Update frame count
         frame_count += 1
-        telemetry["frame"] = frame_count
 
         # Federated Data Writing (ONCE THEN DELETED)
         write_data(telemetry.values(), FED_INPUTS_FILE_PATH)

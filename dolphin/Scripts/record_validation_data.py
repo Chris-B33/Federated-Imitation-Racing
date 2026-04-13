@@ -274,7 +274,6 @@ async def main():
 
         # Update frame count
         frame_count += 1
-        telemetry["frame"] = frame_count
 
         #Validation Data
         write_data(telemetry.values(), VAL_INPUTS_FILE_PATH)

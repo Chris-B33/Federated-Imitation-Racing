@@ -31,11 +31,12 @@ def get_global_model():
     return model
 
 
-def send_model(model):
+def send_model(model, norm_stats):
     """
-    Send trained model to server
+    Send trained model and norm stats to server as a bundle.
     """
-    encoded = en.encode_model(model.state_dict())
+    bundle = {"state_dict": model.state_dict(), "norm_stats": norm_stats}
+    encoded = en.encode_model(bundle)
     url = f"{SERVER_URL}/upload_model"
     files = {"file": ("model.pt", encoded)}
     response = requests.post(url, files=files)
@@ -52,14 +53,14 @@ def main():
         model = get_global_model()
 
         print(f"[+][{datetime.now().strftime('%H:%M:%S')}] Training model...", flush=True)
-        model = tr.update_model(
+        model, norm_stats = tr.update_model(
             model=model,
             inputs_path=INPUTS_PATH,
             labels_path=LABELS_PATH
         )
-        
+
         print(f"[+][{datetime.now().strftime('%H:%M:%S')}] Sending model to server...", flush=True)
-        send_model(model)
+        send_model(model, norm_stats)
 
         # del data after
         os.remove("data/inputs.csv")

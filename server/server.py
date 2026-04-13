@@ -1,5 +1,6 @@
 from flask import Flask, request, Response, jsonify
 import os
+import threading
 import torch
 import traceback
 from datetime import datetime
@@ -20,6 +21,8 @@ CENTRAL_LABELS_PATH = f"data/labels.csv"
 
 app = Flask(__name__)
 os.makedirs(MODEL_FOLDER, exist_ok=True)
+os.makedirs(f"{MODEL_FOLDER}/to_be_federated", exist_ok=True)
+os.makedirs("data", exist_ok=True)
 
 
 @app.route("/health", methods=["GET"])
@@ -80,31 +83,12 @@ def upload_model():
         model_files = [f for f in os.listdir(f"{MODEL_FOLDER}/to_be_federated") if f.endswith(".pt")]
         if len(model_files) >= 3:
             print(f"[+][{datetime.now().strftime('%H:%M:%S')}] Enough models to aggregate!", flush=True)
-            # Train federated model
+
+            # Federated aggregation — fast, do it immediately
             to_aggregate = [os.path.join(f"{MODEL_FOLDER}/to_be_federated", f) for f in model_files]
-            aggregated_path = os.path.join(MODEL_FOLDER, "federated_model.pt")
-            fe.aggregate_models(to_aggregate, aggregated_path)
+            fe.aggregate_models(to_aggregate, os.path.join(MODEL_FOLDER, "federated_model.pt"))
             for p in to_aggregate:
                 os.remove(p)
-
-            # Train centralised model
-            if not os.path.exists(CENTRAL_MODEL_PATH) or os.path.getsize(CENTRAL_MODEL_PATH) == 0:
-                central_model = pp.generate_base_model()
-                torch.save(central_model.state_dict(), CENTRAL_MODEL_PATH)
-        
-            central_model_weights = torch.load(CENTRAL_MODEL_PATH, map_location="cpu", weights_only=True)
-            central_model.load_state_dict(central_model_weights)
-
-            central_model = tr.update_model(
-                central_model,
-                CENTRAL_INPUTS_PATH,
-                CENTRAL_LABELS_PATH
-            )
-            torch.save(central_model.state_dict(), CENTRAL_MODEL_PATH)
-
-            # Remove server dataset
-            os.remove(CENTRAL_INPUTS_PATH)
-            os.remove(CENTRAL_LABELS_PATH)
 
             return f"Model: {name} was uploaded, enough models found to aggregate", 200
         else:

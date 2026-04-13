@@ -85,8 +85,14 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
     inputs = pd.read_csv(inputs_path)
     labels = pd.read_csv(labels_path)
 
-    inputs_norm = pp.normalise_inputs(inputs)
-    labels_norm = pp.normalise_labels(labels)
+    input_mean = inputs.mean()
+    input_std = inputs.std().replace(0, 1)
+    tilt_col = labels.columns[7]
+    tilt_mean = float(labels[tilt_col].mean())
+    tilt_std = float(labels[tilt_col].std() or 1.0)
+
+    inputs_norm = pp.normalise_inputs(inputs, mean=input_mean, std=input_std)
+    labels_norm = pp.normalise_labels(labels, tilt_mean=tilt_mean, tilt_std=tilt_std)
 
     inputs_tensor = torch.tensor(inputs_norm.values, dtype=torch.float32)
     labels_tensor = torch.tensor(labels_norm.values, dtype=torch.float32)
@@ -106,7 +112,6 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
         for i, (batch_inputs, batch_labels) in enumerate(train_loader):
             batch_inputs, batch_labels = batch_inputs.to(device), batch_labels.to(device)
             preds = model(batch_inputs)
-            labels_norm = pp.normalise_labels(labels, binary_cols_count=7)
             metrics = compute_metrics(preds, batch_labels, binary_cols_count=7, loss_weights=(1.0, 0.5))
 
             instantiated_optimiser.zero_grad()
@@ -144,4 +149,10 @@ def update_model(model, inputs_path, labels_path, optimiser=OPTIMISER, epochs=EP
         scale_max=1.5
     )"""
 
-    return model
+    norm_stats = {
+        "input_mean": input_mean.tolist(),
+        "input_std": input_std.tolist(),
+        "tilt_mean": tilt_mean,
+        "tilt_std": tilt_std,
+    }
+    return model, norm_stats
