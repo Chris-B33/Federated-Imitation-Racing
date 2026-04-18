@@ -10,8 +10,8 @@ import pygame
 import threading
 
 import socket
+import time
 import torch
-import random
 
 import shared.preprocessing as pp
 
@@ -23,8 +23,19 @@ PORT = 5000
 
 
 model = pp.generate_base_model()
-dicts = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
-model.load_state_dict(dicts)
+_bundle = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
+if "state_dict" in _bundle:
+    model.load_state_dict(_bundle["state_dict"])
+    _ns = _bundle["norm_stats"]
+    input_mean = torch.tensor(_ns["input_mean"], dtype=torch.float32)
+    input_std  = torch.tensor(_ns["input_std"],  dtype=torch.float32)
+    tilt_mean  = _ns["tilt_mean"]
+    tilt_std   = _ns["tilt_std"]
+    has_norm_stats = True
+else:
+    model.load_state_dict(_bundle)
+    has_norm_stats = False
+    print("Warning: model has no embedded norm stats — normalization will be inaccurate")
 
 
 class WiimoteGUI:
@@ -42,10 +53,13 @@ class WiimoteGUI:
         self.wiiwheel_img = pygame.image.load("assets/wiiwheel.png")
         self.wiiwheel_img = pygame.transform.scale(self.wiiwheel_img, (120, 120))
 
-        self.telemetry = [0]*8
+        self.telemetry = [0] * 6
+        self.buttons = [0] * 7
+        self.steer = 7
+
         self.running = True
 
-        self.buttons = {
+        self.button_postions = {
             "2": (320, 49),
             "1": (287, 49),
             "PLUS": (192, 25),
@@ -66,20 +80,29 @@ class WiimoteGUI:
         }
 
     def update_data(self, telemetry):
-        if len(telemetry) < 8:
-            print("Warning: incomplete telemetry received, ignoring")
+        if len(telemetry) != 6:
+            print("Error. Incorrect telemetry.")
             return
         self.telemetry = telemetry
 
+    def update_buttons(self, button_states):
+        if len(button_states) != 7:
+            print("Error. Incorrect button states.")
+            return
+        self.buttons = button_states
+
+    def update_steer(self, steer_value):
+        self.steer = steer_value
+
     def is_pressed(self, button_name):
         idx = self.button_index[button_name]
-        return int(self.telemetry[idx]) == 1
+        return int(self.buttons[idx]) == 1
 
     def draw_buttons(self):
         rect = self.wiimote_img.get_rect(center=(self.width//2, 50))
         self.screen.blit(self.wiimote_img, rect)
 
-        for name, pos in self.buttons.items():
+        for name, pos in self.button_postions.items():
             pressed = self.is_pressed(name)
 
             base_color = (0, 255, 0) if pressed else (155, 165, 155)
@@ -97,11 +120,11 @@ class WiimoteGUI:
             self.screen.blit(circle_surface, (pos[0] - circle_size, pos[1] - circle_size))
 
     def draw_steering(self):
-        steer = self.telemetry[7]
+        steer = self.steer
         angle = (steer / 14) * 180 - 90
 
         center_x = 100
-        center_y = 175
+        center_y = 185
         
         rotated_image = pygame.transform.rotate(self.wiiwheel_img, -angle)
         rotated_rect = rotated_image.get_rect(center=(center_x, center_y))
@@ -120,7 +143,11 @@ class WiimoteGUI:
         # --- RAW TELEMETRY TEXT ---
         for i, val in enumerate(self.telemetry):
             text = self.font.render(f"{i}: {val}", True, (0,0,0))
-            self.screen.blit(text, (220, 100 + i*20))
+            self.screen.blit(text, (220, 115 + i*20))
+
+        # --- STEER VALUE ---
+        steer_text = self.font.render(f"Steer: {int(round(self.steer))}", True, (0, 0, 0))
+        self.screen.blit(steer_text, (10, self.height - 25))
 
         pygame.display.flip()
 
@@ -149,36 +176,36 @@ def socket_loop(gui):
     print(f"Listening on {HOST}:{PORT}")
 
     conn, addr = server.accept()
+    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     print("Connected:", addr)
 
-    train_min = None
-    train_max = None
+    conn_file = conn.makefile('r')
 
     while True:
-        data = conn.recv(1024)
-        if not data:
+        line = conn_file.readline()
+        if not line:
             break
 
-        parts = data.decode().split()
-        telemetry = [float(x) for x in parts[:-1]] + [int(parts[-1])]
+        parts = line.strip().split()
+        telemetry = [float(x) for x in parts]
 
         gui.update_data(telemetry)
 
         telemetry_tensor = torch.tensor(telemetry, dtype=torch.float32).unsqueeze(0)
 
-        if train_min is None:
-            train_min = telemetry_tensor.clone()
-            train_max = telemetry_tensor.clone()
-        else:
-            train_min = torch.minimum(train_min, telemetry_tensor)
-            train_max = torch.maximum(train_max, telemetry_tensor)
-
-        normalised_telemetry = (telemetry_tensor - train_min) / (train_max - train_min + 1e-8)
+        normalised_telemetry = (telemetry_tensor - input_mean) / (input_std + 1e-8)
 
         with torch.no_grad():
             outputs = model(normalised_telemetry)
 
-        reply = " ".join(map(str, outputs.tolist()[0]))
+        binary = (torch.sigmoid(outputs[:, :7]) > 0.5).float()
+        gui.update_buttons(binary.tolist()[0])
+
+        steer = outputs[:, 7:] * tilt_std + tilt_mean
+        gui.update_steer(steer.item())
+
+        final = torch.cat([binary, steer], dim=1)
+        reply = " ".join(map(str, final.tolist()[0])) + "\n"
         conn.sendall(reply.encode())
 
     conn.close()
@@ -186,17 +213,12 @@ def socket_loop(gui):
 def main():
     gui = WiimoteGUI()
 
-    # Start GUI thread
-    gui_thread = threading.Thread(target=gui.run, daemon=True)
-    gui_thread.start()
-
-    # Start socket thread
+    # Start socket thread in background
     socket_thread = threading.Thread(target=socket_loop, args=(gui,), daemon=True)
     socket_thread.start()
 
-    # Keep main thread alive
-    while gui.running:
-        pass
+    # Run GUI on main thread (required by pygame on Windows)
+    gui.run()
 
 if __name__ == "__main__":
     main()

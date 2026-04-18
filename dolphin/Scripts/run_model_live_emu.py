@@ -13,6 +13,9 @@ PORT = 5000
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect((HOST, PORT))
+client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+client_file = client.makefile('r')
+print("Connected!")
 
 MODEL_PATH = "../../models/centralised_model.pt" # "../../models/federated_model.pt"
 
@@ -168,7 +171,7 @@ def get_current_labels():
     return normalised_labels
 
 
-def draw_gui(telemetry, labels, frame_count):
+def draw_gui(telemetry, labels):
     """
     Draws stats to the top left of the screen.
     """
@@ -179,9 +182,6 @@ def draw_gui(telemetry, labels, frame_count):
     # Labels
     controller_inputs = [f"{ctrl}: {state}" for ctrl, state in labels.items()]
     gui.draw_text((10, 115), 0xffff0000, "\n".join(controller_inputs))
-
-    # Frame count
-    gui.draw_text((10, 250), 0xffff0000, f"frame: {frame_count}")
 
 
 async def apply_controls(ctrls):
@@ -201,8 +201,10 @@ async def apply_controls(ctrls):
     controller.set_wiimote_buttons(0, mapped_ctrls)
 
     # Steering
-    steer = (ctrls[7] * 1.4) - 9.8
-    controller.set_wiimote_acceleration(0, 0, steer, 1)
+    steer_y = (7.0 - ctrls[7]) / 7.0 * 6.9 # main tilt force
+    steer_z = (9.8**2 - steer_y**2) ** 0.5 # perpendicular force
+
+    controller.set_wiimote_acceleration(0, 0, steer_y, steer_z)
 
 
 async def main():
@@ -215,12 +217,11 @@ async def main():
     last_game_id = None
     last_in_race = False
     last_is_paused = False
-    frame_count = 0
 
     while True:
         # Draw GUI
         labels = get_current_labels()
-        draw_gui(prev_telemetry, labels, frame_count)
+        draw_gui(prev_telemetry, labels)
 
         # Check game is loaded
         loaded, game_id = is_game_loaded()
@@ -270,18 +271,14 @@ async def main():
         # Update telemetry
         telemetry = get_current_race_telemetry(prev_telemetry)
         prev_telemetry = {k: v for k, v in telemetry.items()}
-        frame_count += 1
-        telemetry["frame"] = frame_count
 
         # Send telemetry to model
-        message = " ".join(list(map(str, telemetry.values())))
+        message = " ".join(list(map(str, telemetry.values()))) + "\n"
         client.sendall(message.encode())
 
         # Get outputs of model
-        outputs = client.recv(1024)
-        parts = outputs.decode().split()
-        print(parts)
-        ctrls = [round(float(x)) for x in parts]
+        parts = client_file.readline().strip().split()
+        ctrls = [round(float(x)) for x in parts[:7]] + [float(parts[7])]
 
         # Use outputs as controls
         await apply_controls(ctrls)
