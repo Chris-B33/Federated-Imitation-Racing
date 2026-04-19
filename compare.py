@@ -1,6 +1,6 @@
 """
-Compares the federated and centralised imitation learning models on validation data.
-Produces console metrics and five figures suitable for FYP reporting and demo.
+Compares federated and centralised imitation learning models across all rounds
+on validation data. Produces console metrics and figures for FYP reporting.
 """
 
 import torch
@@ -15,9 +15,8 @@ import shared.training as tr
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-MODEL_FOLDER    = "models"
-FED_MODEL_PATH  = f"{MODEL_FOLDER}/federated_model.pt"
-CEN_MODEL_PATH  = f"{MODEL_FOLDER}/centralised_model.pt"
+MODEL_FOLDER    = "models/rounds"
+NUM_ROUNDS      = 5
 VAL_INPUTS_PATH = "shared/val_data/inputs.csv"
 VAL_LABELS_PATH = "shared/val_data/labels.csv"
 
@@ -34,7 +33,6 @@ plt.rcParams.update({"figure.dpi": 120, "font.size": 11})
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def load_model(path):
-    """Load a model and its embedded norm stats from a plain state dict or bundle."""
     model = pp.generate_base_model()
     bundle = torch.load(path, map_location="cpu", weights_only=True)
     if "state_dict" in bundle:
@@ -48,7 +46,6 @@ def load_model(path):
 
 
 def make_tensors(inputs, labels, norm_stats):
-    """Normalise validation data using the model's own training stats."""
     if norm_stats is not None:
         input_mean = pd.Series(norm_stats["input_mean"], index=inputs.columns)
         input_std  = pd.Series(norm_stats["input_std"],  index=inputs.columns)
@@ -63,183 +60,171 @@ def make_tensors(inputs, labels, norm_stats):
     )
 
 
-def evaluate_model(model, data_loader):
+def evaluate_model(model, inputs_t, labels_t):
     model.eval()
+    loader = DataLoader(TensorDataset(inputs_t, labels_t), shuffle=False)
     totals = {"loss": 0.0, "binary_acc": 0.0, "steer_mae": 0.0}
-    n = len(data_loader)
     with torch.no_grad():
-        for inputs, labels in data_loader:
-            m = tr.compute_metrics(model(inputs), labels, binary_cols_count=BINARY_OUTPUTS)
+        for x, y in loader:
+            m = tr.compute_metrics(model(x), y, binary_cols_count=BINARY_OUTPUTS)
             for k in totals:
                 totals[k] += m[k]
+    n = len(loader)
     return {k: v / n for k, v in totals.items()}
 
 
-def print_summary(fed_res, cen_res, fed_steer_mae_raw, cen_steer_mae_raw):
-    print("\n" + "=" * 57)
+def get_predictions(model, inputs_t, norm_stats):
+    model.eval()
+    with torch.no_grad():
+        out = model(inputs_t)
+        binary = (torch.sigmoid(out[:, :BINARY_OUTPUTS]) > 0.5).int().cpu().numpy()
+        steer  = out[:, BINARY_OUTPUTS].cpu().numpy()
+        if norm_stats:
+            steer = steer * norm_stats["tilt_std"] + norm_stats["tilt_mean"]
+    return binary, steer
+
+
+def print_summary(round_idx, fed_res, cen_res, fed_mae_raw, cen_mae_raw):
+    print(f"\n  Round {round_idx}")
+    print("=" * 57)
     print(f"  {'Metric':<30} {'Federated':>10} {'Centralised':>11}")
     print("=" * 57)
     print(f"  {'Loss':<30} {fed_res['loss']:>10.4f} {cen_res['loss']:>11.4f}")
     print(f"  {'Button Accuracy':<30} {fed_res['binary_acc']:>9.1%} {cen_res['binary_acc']:>10.1%}")
-    print(f"  {'Steer MAE (raw units)':<30} {fed_steer_mae_raw:>10.3f} {cen_steer_mae_raw:>11.3f}")
-    print("=" * 57 + "\n")
+    print(f"  {'Steer MAE (raw units)':<30} {fed_mae_raw:>10.3f} {cen_mae_raw:>11.3f}")
+    print("=" * 57)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Load val data ─────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+inputs_raw  = pd.read_csv(VAL_INPUTS_PATH)
+labels_raw  = pd.read_csv(VAL_LABELS_PATH)
+true_steer  = labels_raw[labels_raw.columns[BINARY_OUTPUTS]].values
+true_binary = labels_raw.iloc[:, :BINARY_OUTPUTS].values.astype(int)
 
-    # Load models
-    fed_model, fed_stats = load_model(FED_MODEL_PATH)
-    cen_model, cen_stats = load_model(CEN_MODEL_PATH)
+# ── Evaluate all rounds ───────────────────────────────────────────────────────
 
-    # Load raw validation data
-    inputs = pd.read_csv(VAL_INPUTS_PATH)
-    labels = pd.read_csv(VAL_LABELS_PATH)
+rounds = list(range(1, NUM_ROUNDS + 1))
 
-    # Normalise per-model using each model's own training stats
-    fed_inputs_t, fed_labels_t = make_tensors(inputs, labels, fed_stats)
-    cen_inputs_t, cen_labels_t = make_tensors(inputs, labels, cen_stats)
+fed_history = {"loss": [], "binary_acc": [], "steer_mae_raw": []}
+cen_history = {"loss": [], "binary_acc": [], "steer_mae_raw": []}
 
-    # Evaluate
-    fed_res = evaluate_model(fed_model, DataLoader(TensorDataset(fed_inputs_t, fed_labels_t), shuffle=False))
-    cen_res = evaluate_model(cen_model, DataLoader(TensorDataset(cen_inputs_t, cen_labels_t), shuffle=False))
+for r in rounds:
+    fed_model, fed_stats = load_model(f"{MODEL_FOLDER}/federated_model_round{r}.pt")
+    cen_model, cen_stats = load_model(f"{MODEL_FOLDER}/centralised_model_round{r}.pt")
 
-    # Run full forward passes
-    with torch.no_grad():
-        fed_out = fed_model(fed_inputs_t)
-        cen_out = cen_model(cen_inputs_t)
+    fed_inputs_t, fed_labels_t = make_tensors(inputs_raw, labels_raw, fed_stats)
+    cen_inputs_t, cen_labels_t = make_tensors(inputs_raw, labels_raw, cen_stats)
 
-        # Binary button predictions (0/1)
-        fed_binary = (torch.sigmoid(fed_out[:, :BINARY_OUTPUTS]) > 0.5).int().cpu().numpy()
-        cen_binary = (torch.sigmoid(cen_out[:, :BINARY_OUTPUTS]) > 0.5).int().cpu().numpy()
-        # Binary ground truth is unaffected by label normalisation (stays 0/1)
-        true_binary = fed_labels_t[:, :BINARY_OUTPUTS].int().cpu().numpy()
+    fed_res = evaluate_model(fed_model, fed_inputs_t, fed_labels_t)
+    cen_res = evaluate_model(cen_model, cen_inputs_t, cen_labels_t)
 
-        # Steering — denormalised back to raw units
-        fed_steer  = fed_out[:, BINARY_OUTPUTS].cpu().numpy()
-        cen_steer  = cen_out[:, BINARY_OUTPUTS].cpu().numpy()
-        if fed_stats:
-            fed_steer = fed_steer * fed_stats["tilt_std"] + fed_stats["tilt_mean"]
-        if cen_stats:
-            cen_steer = cen_steer * cen_stats["tilt_std"] + cen_stats["tilt_mean"]
+    _, fed_steer_r = get_predictions(fed_model, fed_inputs_t, fed_stats)
+    _, cen_steer_r = get_predictions(cen_model, cen_inputs_t, cen_stats)
 
-    true_steer = labels[labels.columns[BINARY_OUTPUTS]].values
+    fed_mae_raw = float(np.mean(np.abs(fed_steer_r - true_steer)))
+    cen_mae_raw = float(np.mean(np.abs(cen_steer_r - true_steer)))
 
-    # Raw steer MAE
-    fed_steer_mae_raw = float(np.mean(np.abs(fed_steer - true_steer)))
-    cen_steer_mae_raw = float(np.mean(np.abs(cen_steer - true_steer)))
+    print_summary(r, fed_res, cen_res, fed_mae_raw, cen_mae_raw)
 
-    print_summary(fed_res, cen_res, fed_steer_mae_raw, cen_steer_mae_raw)
+    for hist, res, mae in [(fed_history, fed_res, fed_mae_raw),
+                           (cen_history, cen_res, cen_mae_raw)]:
+        hist["loss"].append(res["loss"])
+        hist["binary_acc"].append(res["binary_acc"])
+        hist["steer_mae_raw"].append(mae)
 
-    frames = np.arange(len(true_steer))
+# Reuse final-round model objects for per-frame figures
+fed_binary, fed_steer = get_predictions(fed_model, fed_inputs_t, fed_stats)
+cen_binary, cen_steer = get_predictions(cen_model, cen_inputs_t, cen_stats)
+frames = np.arange(len(true_steer))
 
 
-    # ── Figure 1: Overall metrics ────────────────────────────────────────────
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
-    fig.suptitle("Overall Validation Metrics", fontweight="bold")
+# ── Figure 1: Overall metrics (final round) ───────────────────────────────────
+fed_final_res = {"loss": fed_history["loss"][-1], "binary_acc": fed_history["binary_acc"][-1]}
+cen_final_res = {"loss": cen_history["loss"][-1], "binary_acc": cen_history["binary_acc"][-1]}
+fed_final_mae = fed_history["steer_mae_raw"][-1]
+cen_final_mae = cen_history["steer_mae_raw"][-1]
 
-    metric_configs = [
-        ("Loss",              fed_res["loss"],        cen_res["loss"],        ".4f"),
-        ("Button Accuracy",   fed_res["binary_acc"],  cen_res["binary_acc"],  ".1%"),
-        ("Steer MAE (raw)",   fed_steer_mae_raw,      cen_steer_mae_raw,      ".3f"),
-    ]
+fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+fig.suptitle(f"Overall Validation Metrics (Round {NUM_ROUNDS})", fontweight="bold")
 
-    for ax, (title, fv, cv, fmt) in zip(axes, metric_configs):
-        bars = ax.bar(["Federated", "Centralised"], [fv, cv],
-                      color=[FED_COLOR, CEN_COLOR], width=0.5, edgecolor="white")
-        ax.bar_label(bars, fmt=f"%{fmt}", padding=4)
-        ax.set_title(title)
-        ax.set_ylim(0, max(fv, cv) * 1.3 or 0.01)
-        ax.spines[["top", "right"]].set_visible(False)
+for ax, (title, fv, cv, fmt) in zip(axes, [
+    ("Loss",            fed_final_res["loss"],       cen_final_res["loss"],       ".4f"),
+    ("Button Accuracy", fed_final_res["binary_acc"], cen_final_res["binary_acc"], ".1%"),
+    ("Steer MAE (raw)", fed_final_mae,               cen_final_mae,               ".3f"),
+]):
+    bars = ax.bar(["Federated", "Centralised"], [fv, cv],
+                  color=[FED_COLOR, CEN_COLOR], width=0.5, edgecolor="white")
+    ax.bar_label(bars, fmt=f"%{fmt}", padding=4)
+    ax.set_title(title)
+    ax.set_ylim(0, max(fv, cv) * 1.3 or 0.01)
+    ax.spines[["top", "right"]].set_visible(False)
 
-    plt.tight_layout()
-    plt.show()
+plt.tight_layout()
+plt.show()
 
 
-    # ── Figure 2: Per-button accuracy ────────────────────────────────────────
-    fed_acc_per = (fed_binary == true_binary).mean(axis=0)
-    cen_acc_per = (cen_binary == true_binary).mean(axis=0)
+# ── Figure 2: Metrics over rounds ─────────────────────────────────────────────
+fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+fig.suptitle("Validation Metrics Across Training Rounds", fontweight="bold")
 
-    x = np.arange(len(BUTTON_NAMES))
-    width = 0.35
-    fig, ax = plt.subplots(figsize=(11, 5))
-    fig.suptitle("Per-Button Prediction Accuracy", fontweight="bold")
-    b1 = ax.bar(x - width / 2, fed_acc_per, width, label="Federated",   color=FED_COLOR)
-    b2 = ax.bar(x + width / 2, cen_acc_per, width, label="Centralised", color=CEN_COLOR)
-    ax.bar_label(b1, fmt="%.2f", padding=2, fontsize=9)
-    ax.bar_label(b2, fmt="%.2f", padding=2, fontsize=9)
-    ax.set_xticks(x)
-    ax.set_xticklabels(BUTTON_NAMES)
-    ax.set_ylabel("Accuracy")
-    ax.set_ylim(0, 1.18)
-    ax.axhline(1.0, color="grey", linewidth=0.8, linestyle="--", alpha=0.6)
+for ax, (title, key, pct) in zip(axes, [
+    ("Loss",            "loss",          False),
+    ("Button Accuracy", "binary_acc",    True),
+    ("Steer MAE (raw)", "steer_mae_raw", False),
+]):
+    ax.plot(rounds, fed_history[key], marker="o", color=FED_COLOR, label="Federated",   linewidth=1.8)
+    ax.plot(rounds, cen_history[key], marker="s", color=CEN_COLOR, label="Centralised", linewidth=1.8)
+    ax.set_title(title)
+    ax.set_xlabel("Round")
+    ax.set_xticks(rounds)
     ax.legend()
     ax.spines[["top", "right"]].set_visible(False)
-    plt.tight_layout()
-    plt.show()
+    if pct:
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
+
+plt.tight_layout()
+plt.show()
 
 
-    # ── Figure 3: Button press rates vs ground truth ─────────────────────────
-    true_rates = true_binary.mean(axis=0)
-    fed_rates  = fed_binary.mean(axis=0)
-    cen_rates  = cen_binary.mean(axis=0)
+# ── Figure 3 (old Fig 4): Steering over time + smoothed error (final round) ───
+fed_err = np.abs(fed_steer - true_steer)
+cen_err = np.abs(cen_steer - true_steer)
+window  = max(1, len(frames) // 60)
+smooth  = lambda x: np.convolve(x, np.ones(window) / window, mode="same")
 
-    x = np.arange(len(BUTTON_NAMES))
-    width = 0.25
-    fig, ax = plt.subplots(figsize=(11, 5))
-    fig.suptitle("Button Press Rate vs Ground Truth", fontweight="bold")
-    ax.bar(x - width, true_rates, width, label="Ground Truth", color=GT_COLOR,  alpha=0.9)
-    ax.bar(x,         fed_rates,  width, label="Federated",    color=FED_COLOR, alpha=0.9)
-    ax.bar(x + width, cen_rates,  width, label="Centralised",  color=CEN_COLOR, alpha=0.9)
-    ax.set_xticks(x)
-    ax.set_xticklabels(BUTTON_NAMES)
-    ax.set_ylabel("Press Rate")
-    ax.set_ylim(0, 1.15)
-    ax.legend()
-    ax.spines[["top", "right"]].set_visible(False)
-    plt.tight_layout()
-    plt.show()
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 7), sharex=True,
+                                gridspec_kw={"height_ratios": [2, 1]})
+fig.suptitle(f"Steering: Prediction vs Ground Truth (Round {NUM_ROUNDS})", fontweight="bold")
 
+ax1.plot(frames, true_steer, label="Ground Truth", color=GT_COLOR,  alpha=0.85, linewidth=1.3)
+ax1.plot(frames, fed_steer,  label="Federated",    color=FED_COLOR, alpha=0.75, linewidth=1.0)
+ax1.plot(frames, cen_steer,  label="Centralised",  color=CEN_COLOR, alpha=0.75, linewidth=1.0)
+ax1.set_ylabel("Steering Value")
+ax1.legend()
+ax1.spines[["top", "right"]].set_visible(False)
 
-    # ── Figure 4: Steering over time + smoothed error ────────────────────────
-    fed_err = np.abs(fed_steer - true_steer)
-    cen_err = np.abs(cen_steer - true_steer)
-    window  = max(1, len(frames) // 60)
-    smooth  = lambda x: np.convolve(x, np.ones(window) / window, mode="same")
+ax2.plot(frames, smooth(fed_err), label="Federated error",   color=FED_COLOR, linewidth=1.3)
+ax2.plot(frames, smooth(cen_err), label="Centralised error", color=CEN_COLOR, linewidth=1.3)
+ax2.set_xlabel("Frame")
+ax2.set_ylabel("Abs Error (smoothed)")
+ax2.legend()
+ax2.spines[["top", "right"]].set_visible(False)
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 7), sharex=True,
-                                    gridspec_kw={"height_ratios": [2, 1]})
-    fig.suptitle("Steering: Prediction vs Ground Truth", fontweight="bold")
-
-    ax1.plot(frames, true_steer, label="Ground Truth", color=GT_COLOR,  alpha=0.85, linewidth=1.3)
-    ax1.plot(frames, fed_steer,  label="Federated",    color=FED_COLOR, alpha=0.75, linewidth=1.0)
-    ax1.plot(frames, cen_steer,  label="Centralised",  color=CEN_COLOR, alpha=0.75, linewidth=1.0)
-    ax1.set_ylabel("Steering Value")
-    ax1.legend()
-    ax1.spines[["top", "right"]].set_visible(False)
-
-    ax2.plot(frames, smooth(fed_err), label="Federated error",   color=FED_COLOR, linewidth=1.3)
-    ax2.plot(frames, smooth(cen_err), label="Centralised error", color=CEN_COLOR, linewidth=1.3)
-    ax2.set_xlabel("Frame")
-    ax2.set_ylabel("Abs Error (smoothed)")
-    ax2.legend()
-    ax2.spines[["top", "right"]].set_visible(False)
-
-    plt.tight_layout()
-    plt.show()
+plt.tight_layout()
+plt.show()
 
 
-    # ── Figure 5: Steering distribution ──────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(9, 5))
-    fig.suptitle("Steering Prediction Distribution", fontweight="bold")
-    bins = 35
-    ax.hist(true_steer, bins=bins, alpha=0.55, label="Ground Truth", color=GT_COLOR,  density=True)
-    ax.hist(fed_steer,  bins=bins, alpha=0.55, label="Federated",    color=FED_COLOR, density=True)
-    ax.hist(cen_steer,  bins=bins, alpha=0.55, label="Centralised",  color=CEN_COLOR, density=True)
-    ax.set_xlabel("Steering Value")
-    ax.set_ylabel("Density")
-    ax.legend()
-    ax.spines[["top", "right"]].set_visible(False)
-    plt.tight_layout()
-    plt.show()
+# ── Figure 4 (old Fig 5): Steering distribution (final round) ────────────────
+fig, ax = plt.subplots(figsize=(9, 5))
+fig.suptitle(f"Steering Prediction Distribution (Round {NUM_ROUNDS})", fontweight="bold")
+bins = 35
+ax.hist(true_steer, bins=bins, alpha=0.55, label="Ground Truth", color=GT_COLOR,  density=True)
+ax.hist(fed_steer,  bins=bins, alpha=0.55, label="Federated",    color=FED_COLOR, density=True)
+ax.hist(cen_steer,  bins=bins, alpha=0.55, label="Centralised",  color=CEN_COLOR, density=True)
+ax.set_xlabel("Steering Value")
+ax.set_ylabel("Density")
+ax.legend()
+ax.spines[["top", "right"]].set_visible(False)
+plt.tight_layout()
+plt.show()

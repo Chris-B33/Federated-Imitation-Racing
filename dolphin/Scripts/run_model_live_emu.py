@@ -5,7 +5,7 @@ This script runs a given model.
 ***WIIMOTE 1 MUST BE SET TO EMULATED WIIMOTE IN CONTROLLER OPTIONS.***
 """
 
-from dolphin import memory, event, gui, controller
+from dolphin import memory, event, gui, controller, savestate
 import socket
 
 HOST = "127.0.0.1"
@@ -33,6 +33,8 @@ prev_telemetry = {
     "speed": 0,
     "accel": 0,
     "lap": 1,
+    "hdg_x": 0,
+    "hdg_z": 0,
 }
 
 
@@ -130,21 +132,27 @@ def get_current_race_telemetry(prev_telemetry):
     """
     player_pos = get_player_position()
 
-    dx = abs(prev_telemetry["pos_x"] - player_pos["x"])
-    dy = abs(prev_telemetry["pos_y"] - player_pos["y"])
-    dz = abs(prev_telemetry["pos_z"] - player_pos["z"])
+    raw_dx = player_pos["x"] - prev_telemetry["pos_x"]
+    raw_dy = player_pos["y"] - prev_telemetry["pos_y"]
+    raw_dz = player_pos["z"] - prev_telemetry["pos_z"]
 
-    speed = (dx**2 + dy**2 +dz**2) ** 0.5
+    speed = (raw_dx**2 + raw_dy**2 + raw_dz**2) ** 0.5
+
+    magnitude = speed if speed > 0.01 else 1
+    heading_x = raw_dx / magnitude
+    heading_z = raw_dz / magnitude
 
     lap_progress = get_data_point(0x809BD730, 0xF8, "f32", deref=True)
 
     telemetry = {
-        "pos_x": player_pos["x"],
-        "pos_y": player_pos["y"],
-        "pos_z": player_pos["z"],
-        "speed": speed,
-        "accel": speed - prev_telemetry["speed"],
-        "lap":   lap_progress - 1,
+        "pos_x":   player_pos["x"],
+        "pos_y":   player_pos["y"],
+        "pos_z":   player_pos["z"],
+        "speed":   speed,
+        "accel":   speed - prev_telemetry["speed"],
+        "lap":     lap_progress - 1,
+        "hdg_x":   heading_x,
+        "hdg_z":   heading_z,
     }
 
     return telemetry
@@ -176,12 +184,15 @@ def draw_gui(telemetry, labels):
     Draws stats to the top left of the screen.
     """
     # Telemetry
-    environment_inputs = [f"{ctrl}: {state}" for ctrl, state in telemetry.items()]
+    environment_inputs = [
+        f"{ctrl}: {state:.2f}" if isinstance(state, float) else f"{ctrl}: {state}"
+        for ctrl, state in telemetry.items()
+    ]
     gui.draw_text((10, 10), 0xffff0000, "\n".join(environment_inputs))
 
     # Labels
     controller_inputs = [f"{ctrl}: {state}" for ctrl, state in labels.items()]
-    gui.draw_text((10, 115), 0xffff0000, "\n".join(controller_inputs))
+    gui.draw_text((10, 175), 0xffff0000, "\n".join(controller_inputs))
 
 
 async def apply_controls(ctrls):
@@ -200,9 +211,10 @@ async def apply_controls(ctrls):
     }
     controller.set_wiimote_buttons(0, mapped_ctrls)
 
-    # Steering
-    steer_y = (7.0 - ctrls[7]) / 7.0 * 6.9 # main tilt force
-    steer_z = (9.8**2 - steer_y**2) ** 0.5 # perpendicular force
+    # Steering — clamp input to valid range before computing tilt components
+    steer_val = max(0.0, min(14.0, ctrls[7]))
+    steer_y = (7.0 - steer_val) / 7.0 * 6.9
+    steer_z = (9.8**2 - steer_y**2) ** 0.5
 
     controller.set_wiimote_acceleration(0, 0, steer_y, steer_z)
 
@@ -217,6 +229,10 @@ async def main():
     last_game_id = None
     last_in_race = False
     last_is_paused = False
+    race_frame = 0
+    WARMUP_FRAMES = 1000
+
+    savestate.load_from_slot(1)
 
     while True:
         # Draw GUI
@@ -246,6 +262,7 @@ async def main():
 
             if in_race:
                 print("🏁 Entered race.")
+                race_frame = 0
             else:
                 print("🕹️ Exited race.")
                 await event.frameadvance()
@@ -279,6 +296,13 @@ async def main():
         # Get outputs of model
         parts = client_file.readline().strip().split()
         ctrls = [round(float(x)) for x in parts[:7]] + [float(parts[7])]
+
+        # Force button 2 (accelerate) during warmup so car is moving before model takes over
+        if race_frame < 400:
+            ctrls[0] = 0
+        elif race_frame < WARMUP_FRAMES:
+            ctrls[0] = 1
+        race_frame += 1
 
         # Use outputs as controls
         await apply_controls(ctrls)

@@ -3,14 +3,12 @@ Model script acts as server.
 """
 import sys
 import os
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))) # allows for import of "shared"
 
 import pygame
 import threading
 
 import socket
-import time
 import torch
 
 import shared.preprocessing as pp
@@ -41,7 +39,7 @@ else:
 class WiimoteGUI:
     def __init__(self):
         pygame.init()
-        self.width, self.height = 400, 260
+        self.width, self.height = 400, 310
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("Live Model Outputs")
 
@@ -53,15 +51,16 @@ class WiimoteGUI:
         self.wiiwheel_img = pygame.image.load("assets/wiiwheel.png")
         self.wiiwheel_img = pygame.transform.scale(self.wiiwheel_img, (120, 120))
 
-        self.telemetry = [0] * 6
+        self.telemetry = [0] * 8
+        self.telemetry_labels = ["pos_x", "pos_y", "pos_z", "speed", "accel", "lap", "hdg_x", "hdg_z"]
         self.buttons = [0] * 7
         self.steer = 7
 
         self.running = True
 
         self.button_postions = {
-            "2": (320, 49),
-            "1": (287, 49),
+            "2": (319, 51),
+            "1": (287, 51),
             "PLUS": (192, 25),
             "UP": (55, 49),
             "DOWN": (95, 49),
@@ -80,7 +79,7 @@ class WiimoteGUI:
         }
 
     def update_data(self, telemetry):
-        if len(telemetry) != 6:
+        if len(telemetry) != 8:
             print("Error. Incorrect telemetry.")
             return
         self.telemetry = telemetry
@@ -124,7 +123,7 @@ class WiimoteGUI:
         angle = (steer / 14) * 180 - 90
 
         center_x = 100
-        center_y = 185
+        center_y = 200
         
         rotated_image = pygame.transform.rotate(self.wiiwheel_img, -angle)
         rotated_rect = rotated_image.get_rect(center=(center_x, center_y))
@@ -141,13 +140,9 @@ class WiimoteGUI:
         self.draw_steering()
 
         # --- RAW TELEMETRY TEXT ---
-        for i, val in enumerate(self.telemetry):
-            text = self.font.render(f"{i}: {val}", True, (0,0,0))
-            self.screen.blit(text, (220, 115 + i*20))
-
-        # --- STEER VALUE ---
-        steer_text = self.font.render(f"Steer: {int(round(self.steer))}", True, (0, 0, 0))
-        self.screen.blit(steer_text, (10, self.height - 25))
+        for i, (label, val) in enumerate(zip(self.telemetry_labels, self.telemetry)):
+            text = self.font.render(f"{label}: {val:.3f}", True, (0, 0, 0))
+            self.screen.blit(text, (220, 120 + i*20))
 
         pygame.display.flip()
 
@@ -187,12 +182,14 @@ def socket_loop(gui):
             break
 
         parts = line.strip().split()
-        telemetry = [float(x) for x in parts]
+        if len(parts) != 8:
+            print(f"Bad packet ({len(parts)} values), skipping", flush=True)
+            continue
 
+        telemetry = [float(x) for x in parts]
         gui.update_data(telemetry)
 
         telemetry_tensor = torch.tensor(telemetry, dtype=torch.float32).unsqueeze(0)
-
         normalised_telemetry = (telemetry_tensor - input_mean) / (input_std + 1e-8)
 
         with torch.no_grad():

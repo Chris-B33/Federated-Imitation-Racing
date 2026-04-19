@@ -4,7 +4,7 @@ It appends to the server data, as this will be a centralised model database.
 It resets and writes over the client data, as this will be for a federated models database.
 """
 
-from dolphin import memory, event, gui
+from dolphin import memory, event, gui, savestate
 
 BASE_ADDRS = {
     "game_base": 0x80000000,
@@ -25,6 +25,8 @@ prev_telemetry = {
     "speed": 0,
     "accel": 0,
     "lap": 1,
+    "hdg_x": 0,
+    "hdg_z": 0,
 }
 
 prev_labels = {
@@ -133,11 +135,15 @@ def get_current_race_telemetry(prev_telemetry):
     """
     player_pos = get_player_position()
 
-    dx = abs(prev_telemetry["pos_x"] - player_pos["x"])
-    dy = abs(prev_telemetry["pos_y"] - player_pos["y"])
-    dz = abs(prev_telemetry["pos_z"] - player_pos["z"])
+    raw_dx = player_pos["x"] - prev_telemetry["pos_x"]
+    raw_dy = player_pos["y"] - prev_telemetry["pos_y"]
+    raw_dz = player_pos["z"] - prev_telemetry["pos_z"]
 
-    speed = (dx**2 + dy**2 +dz**2) ** 0.5
+    speed = (raw_dx**2 + raw_dy**2 + raw_dz**2) ** 0.5
+
+    magnitude = speed if speed > 0.01 else 1
+    heading_x = raw_dx / magnitude
+    heading_z = raw_dz / magnitude
 
     lap_progress = get_data_point(0x809BD730, 0xF8, "f32", deref=True)
 
@@ -148,6 +154,8 @@ def get_current_race_telemetry(prev_telemetry):
         "speed": speed,
         "accel": speed - prev_telemetry["speed"],
         "lap":   lap_progress - 1,
+        "hdg_x": heading_x,
+        "hdg_z": heading_z,
     }
 
     return telemetry
@@ -185,7 +193,7 @@ def write_data(data_list, filepath):
         print(e)
 
 
-def draw_gui(telemetry, labels, frame_count):
+def draw_gui(telemetry, labels):
     """
     Draws stats to the top left of the screen.
     """
@@ -195,10 +203,7 @@ def draw_gui(telemetry, labels, frame_count):
 
     # Labels
     controller_inputs = [f"{ctrl}: {state}" for ctrl, state in labels.items()]
-    gui.draw_text((10, 115), 0xffff0000, "\n".join(controller_inputs))
-
-    # Frame count
-    gui.draw_text((10, 250), 0xffff0000, f"frame: {frame_count}")
+    gui.draw_text((10, 145), 0xffff0000, "\n".join(controller_inputs))
 
 
 async def main():
@@ -211,11 +216,12 @@ async def main():
     last_game_id = None
     last_in_race = False
     last_is_paused = False
-    frame_count = 0
+
+    savestate.load_from_slot(1)
 
     while True:
         # Draw GUI
-        draw_gui(prev_telemetry, prev_labels, frame_count)
+        draw_gui(prev_telemetry, prev_labels)
 
         # Check game is loaded
         loaded, game_id = is_game_loaded()
@@ -274,9 +280,6 @@ async def main():
         # Overwrite prev
         prev_telemetry = {k: v for k, v in telemetry.items()}
         prev_labels = {k: v for k, v in labels.items()}
-
-        # Update frame count
-        frame_count += 1
 
         # Federated Data Writing (ONCE THEN DELETED)
         write_data(telemetry.values(), FED_INPUTS_FILE_PATH)

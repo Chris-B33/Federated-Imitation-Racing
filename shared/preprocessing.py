@@ -1,7 +1,7 @@
 import pandas as pd
 import torch.nn as nn
 
-INPUT_DIM = 6
+INPUT_DIM = 8
 OUTPUT_DIM = 8
 BINARY_OUTPUTS = 7
 

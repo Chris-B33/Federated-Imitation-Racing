@@ -26,7 +26,8 @@ def get_global_model():
     sd = en.decode_model(sd_bytes)
 
     model = pp.generate_base_model()
-    model.load_state_dict(sd)
+    weights = sd["state_dict"] if "state_dict" in sd else sd
+    model.load_state_dict(weights)
 
     return model
 
