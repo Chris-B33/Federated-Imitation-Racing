@@ -62,4 +62,4 @@ Before running the project, make sure you have the following installed on your s
     - Run the "run_model_live_server.py" script externally.
     - Run the "run_model_live_emu.py" through the Dolphin scripting interface.
     - Set the model based on MODEL_NAME in the server script.
-    - Load into the race and watch the named model play live.
+    - A save state will be loaded and you can watch the named model play live.

@@ -34,7 +34,7 @@
 ┌───────────────────────────────────────────┐
 │ Evaluation / Analysis Layer               │
 │ - Compare centralized vs federated models │
-│ - Measure divergence & accuracy           │⏳
+│ - Measure divergence & accuracy           │✅
 │ - Tune aggregation / personalization      │
 └──────────────────┬────────────────────────┘
                    │
@@ -43,7 +43,7 @@
 │ Dolphin (AI)                              │
 │ - Feeds telemetry live                    │
 │ - Federated or Centralised model outputs  │
-│   controller actions                      │❌
+│   controller actions                      │✅
 │ - Actions injected via controller pipe    │
 │ - Audience sees AI drive in real time     │
 └───────────────────────────────────────────┘
